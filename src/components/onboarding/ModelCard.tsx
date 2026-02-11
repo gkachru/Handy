@@ -7,6 +7,7 @@ import {
   Languages,
   Loader2,
   Trash2,
+  Zap,
 } from "lucide-react";
 import type { ModelInfo } from "@/bindings";
 import { formatModelSize } from "../../lib/utils/format";
@@ -17,6 +18,12 @@ import {
 import { LANGUAGES } from "../../lib/constants/languages";
 import Badge from "../ui/Badge";
 import { Button } from "../ui/Button";
+
+export const REALTIME_MODEL_IDS = new Set([
+  "mistral-voxtral-realtime",
+  "parakeet-tdt-0.6b-v3",
+  "moonshine-base",
+]);
 
 // Get display text for model's language support
 const getLanguageDisplayText = (
@@ -214,6 +221,12 @@ const ModelCard: React.FC<ModelCardProps> = ({
           >
             <Languages className="w-3.5 h-3.5" />
             <span>{t("modelSelector.capabilities.translate")}</span>
+          </div>
+        )}
+        {REALTIME_MODEL_IDS.has(model.id) && (
+          <div className="flex items-center gap-1 text-xs text-text/50">
+            <Zap className="w-3.5 h-3.5" />
+            <span>{t("modelSelector.capabilities.realtime")}</span>
           </div>
         )}
         {status === "downloadable" && (

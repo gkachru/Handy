@@ -50,6 +50,9 @@ pub struct TranscriptionManager {
     watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
     is_loading: Arc<Mutex<bool>>,
     loading_condvar: Arc<Condvar>,
+    /// When true, an incremental transcription session is active and the model
+    /// should not be unloaded by `maybe_unload_immediately()`.
+    active_session: Arc<AtomicBool>,
 }
 
 impl TranscriptionManager {
@@ -69,6 +72,7 @@ impl TranscriptionManager {
             watcher_handle: Arc::new(Mutex::new(None)),
             is_loading: Arc::new(Mutex::new(false)),
             loading_condvar: Arc::new(Condvar::new()),
+            active_session: Arc::new(AtomicBool::new(false)),
         };
 
         // Start the idle watcher
@@ -179,8 +183,16 @@ impl TranscriptionManager {
         Ok(())
     }
 
-    /// Unloads the model immediately if the setting is enabled and the model is loaded
+    /// Unloads the model immediately if the setting is enabled and the model is loaded.
+    /// Skips unloading if an incremental transcription session is active.
     pub fn maybe_unload_immediately(&self, context: &str) {
+        if self.active_session.load(Ordering::Relaxed) {
+            debug!(
+                "Skipping immediate unload after {} — incremental session active",
+                context
+            );
+            return;
+        }
         let settings = get_settings(&self.app_handle);
         if settings.model_unload_timeout == ModelUnloadTimeout::Immediately
             && self.is_model_loaded()
@@ -190,6 +202,12 @@ impl TranscriptionManager {
                 warn!("Failed to immediately unload model: {}", e);
             }
         }
+    }
+
+    /// Set whether an incremental transcription session is active.
+    /// When active, `maybe_unload_immediately()` will skip unloading.
+    pub fn set_active_session(&self, active: bool) {
+        self.active_session.store(active, Ordering::Relaxed);
     }
 
     pub fn load_model(&self, model_id: &str) -> Result<()> {

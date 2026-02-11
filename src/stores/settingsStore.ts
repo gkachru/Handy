@@ -135,6 +135,8 @@ const settingUpdaters: {
     commands.changeShowTrayIconSetting(value as boolean),
   streaming_translation_enabled: (value) =>
     commands.changeStreamingTranslationSetting(value as boolean),
+  realtime_transcription_enabled: (value) =>
+    commands.changeRealtimeTranscriptionSetting(value as boolean),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

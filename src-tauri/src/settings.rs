@@ -360,6 +360,8 @@ pub struct AppSettings {
     pub mistral_api_key: String,
     #[serde(default)]
     pub streaming_translation_enabled: bool,
+    #[serde(default = "default_realtime_transcription_enabled")]
+    pub realtime_transcription_enabled: bool,
 }
 
 fn default_model() -> String {
@@ -551,6 +553,10 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
     }]
 }
 
+fn default_realtime_transcription_enabled() -> bool {
+    true
+}
+
 fn default_typing_tool() -> TypingTool {
     TypingTool::Auto
 }
@@ -693,6 +699,7 @@ pub fn get_default_settings() -> AppSettings {
         typing_tool: default_typing_tool(),
         mistral_api_key: String::new(),
         streaming_translation_enabled: false,
+        realtime_transcription_enabled: true,
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::actions::{MistralSessionState, StreamingTranslatorState};
+use crate::actions::{IncrementalSessionState, MistralSessionState, StreamingTranslatorState};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::shortcut;
@@ -28,6 +28,17 @@ pub fn cancel_current_operation(app: &AppHandle) {
         states.active_toggles.values_mut().for_each(|v| *v = false);
     } else {
         warn!("Failed to lock toggle state manager during cancellation");
+    }
+
+    // Stop any active incremental transcription session
+    {
+        let state = app.state::<IncrementalSessionState>();
+        let mut guard = state.0.lock().unwrap();
+        if let Some(mut session) = guard.take() {
+            let tm = app.state::<Arc<TranscriptionManager>>();
+            session.stop(&tm);
+            info!("Incremental transcription session cancelled");
+        }
     }
 
     // Stop any active streaming translator

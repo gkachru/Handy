@@ -3,7 +3,9 @@ use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
+use crate::managers::incremental_transcription::IncrementalTranscriptionSession;
 use crate::managers::mistral_realtime::MistralRealtimeSession;
+use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::streaming_translator::{self, StreamingTranslator};
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
@@ -11,7 +13,7 @@ use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{
     self, show_processing_overlay, show_recording_overlay, show_streaming_overlay,
-    show_transcribing_overlay,
+    show_streaming_overlay_ext, show_transcribing_overlay,
 };
 use crate::ManagedToggleState;
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
@@ -28,6 +30,9 @@ pub struct MistralSessionState(pub Mutex<Option<MistralRealtimeSession>>);
 
 /// Managed state for an active streaming translator
 pub struct StreamingTranslatorState(pub Mutex<Option<StreamingTranslator>>);
+
+/// Managed state for an active incremental (VAD-segmented) transcription session
+pub struct IncrementalSessionState(pub Mutex<Option<IncrementalTranscriptionSession>>);
 
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
@@ -236,9 +241,28 @@ impl ShortcutAction for TranscribeAction {
         let is_mistral_api = settings.selected_model == "mistral-voxtral-realtime"
             && !settings.mistral_api_key.is_empty();
 
+        // Check if the selected model supports incremental (VAD-segmented) streaming
+        let supports_incremental = if settings.realtime_transcription_enabled {
+            let mm = app.state::<Arc<ModelManager>>();
+            if let Some(info) = mm.get_model_info(&settings.selected_model) {
+                matches!(
+                    info.engine_type,
+                    EngineType::Parakeet | EngineType::Moonshine
+                )
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         if is_mistral_api {
             change_tray_icon(app, TrayIconState::Recording);
             show_streaming_overlay(app);
+        } else if supports_incremental {
+            change_tray_icon(app, TrayIconState::Recording);
+            // No translation panel for local incremental models (English-only)
+            show_streaming_overlay_ext(app, false);
         } else {
             change_tray_icon(app, TrayIconState::Recording);
             show_recording_overlay(app);
@@ -290,8 +314,8 @@ impl ShortcutAction for TranscribeAction {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
 
-            // Start Mistral streaming if applicable
             if is_mistral_api {
+                // Mistral API streaming mode
                 if let Some(audio_rx) = rm.enable_audio_streaming() {
                     let session = MistralRealtimeSession::start(
                         app.clone(),
@@ -317,6 +341,40 @@ impl ShortcutAction for TranscribeAction {
                     info!("Mistral realtime streaming session started");
                 } else {
                     error!("Failed to enable audio streaming for Mistral API");
+                }
+            } else if supports_incremental {
+                // VAD-segmented incremental streaming for fast local models
+                if let Some(audio_rx) = rm.enable_audio_streaming() {
+                    let vad_path = app
+                        .path()
+                        .resolve(
+                            "resources/models/silero_vad_v4.onnx",
+                            tauri::path::BaseDirectory::Resource,
+                        )
+                        .map(|p| p.to_string_lossy().to_string());
+
+                    match vad_path {
+                        Ok(path) => {
+                            let session = IncrementalTranscriptionSession::start(
+                                app.clone(),
+                                Arc::clone(&tm),
+                                audio_rx,
+                                path,
+                            );
+                            let state = app.state::<IncrementalSessionState>();
+                            *state.0.lock().unwrap() = Some(session);
+                            info!("Incremental transcription session started");
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to resolve VAD model path for incremental session: {}",
+                                e
+                            );
+                            rm.disable_audio_streaming();
+                        }
+                    }
+                } else {
+                    error!("Failed to enable audio streaming for incremental transcription");
                 }
             }
         }
@@ -344,7 +402,15 @@ impl ShortcutAction for TranscribeAction {
         let is_mistral_api = settings.selected_model == "mistral-voxtral-realtime"
             && !settings.mistral_api_key.is_empty();
 
-        if !is_mistral_api {
+        // Check if we have an active incremental session
+        let incremental_session = {
+            let state = app.state::<IncrementalSessionState>();
+            let session = state.0.lock().unwrap().take();
+            session
+        };
+        let has_incremental = incremental_session.is_some();
+
+        if !is_mistral_api && !has_incremental {
             change_tray_icon(app, TrayIconState::Transcribing);
             show_transcribing_overlay(app);
         }
@@ -365,7 +431,138 @@ impl ShortcutAction for TranscribeAction {
                 binding_id
             );
 
-            if is_mistral_api {
+            if let Some(mut session) = incremental_session {
+                // Incremental (VAD-segmented) streaming mode: stop session, do final full-buffer transcription
+                rm.disable_audio_streaming();
+                session.stop(&tm);
+
+                // Show "Transcribing..." briefly for the final full-buffer pass
+                change_tray_icon(&ah, TrayIconState::Transcribing);
+                show_transcribing_overlay(&ah);
+
+                let stop_recording_time = Instant::now();
+                if let Some(samples) = rm.stop_recording(&binding_id) {
+                    debug!(
+                        "Recording stopped and samples retrieved in {:?}, sample count: {}",
+                        stop_recording_time.elapsed(),
+                        samples.len()
+                    );
+
+                    let transcription_time = Instant::now();
+                    let samples_clone = samples.clone();
+
+                    // Final full-buffer transcription for best quality
+                    let transcription_result = match tm.transcribe(samples) {
+                        Ok(transcription) if !transcription.is_empty() => {
+                            debug!(
+                                "Final full-buffer transcription completed in {:?}: '{}'",
+                                transcription_time.elapsed(),
+                                transcription
+                            );
+                            transcription
+                        }
+                        Ok(_) => {
+                            // Empty transcription — fall back to accumulated segment preview
+                            let preview = session.get_accumulated_text();
+                            debug!(
+                                "Final transcription empty, falling back to segment preview: '{}'",
+                                preview
+                            );
+                            preview
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Final transcription failed: {}, falling back to segment preview",
+                                e
+                            );
+                            session.get_accumulated_text()
+                        }
+                    };
+
+                    if !transcription_result.is_empty() {
+                        let settings = get_settings(&ah);
+                        let mut final_text = transcription_result.clone();
+                        let mut post_processed_text: Option<String> = None;
+                        let mut post_process_prompt: Option<String> = None;
+
+                        // Chinese variant conversion
+                        if let Some(converted_text) =
+                            maybe_convert_chinese_variant(&settings, &transcription_result).await
+                        {
+                            final_text = converted_text;
+                        }
+
+                        // LLM post-processing
+                        if post_process {
+                            show_processing_overlay(&ah);
+                        }
+                        let processed = if post_process {
+                            post_process_transcription(&settings, &final_text).await
+                        } else {
+                            None
+                        };
+                        if let Some(processed_text) = processed {
+                            post_processed_text = Some(processed_text.clone());
+                            final_text = processed_text;
+
+                            if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
+                                if let Some(prompt) = settings
+                                    .post_process_prompts
+                                    .iter()
+                                    .find(|p| &p.id == prompt_id)
+                                {
+                                    post_process_prompt = Some(prompt.prompt.clone());
+                                }
+                            }
+                        } else if final_text != transcription_result {
+                            post_processed_text = Some(final_text.clone());
+                        }
+
+                        // Save to history
+                        let hm_clone = Arc::clone(&hm);
+                        let transcription_for_history = transcription_result.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = hm_clone
+                                .save_transcription(
+                                    samples_clone,
+                                    transcription_for_history,
+                                    post_processed_text,
+                                    post_process_prompt,
+                                )
+                                .await
+                            {
+                                error!("Failed to save transcription to history: {}", e);
+                            }
+                        });
+
+                        // Paste the final text
+                        let ah_clone = ah.clone();
+                        let paste_time = Instant::now();
+                        ah.run_on_main_thread(move || {
+                            match utils::paste(final_text, ah_clone.clone()) {
+                                Ok(()) => {
+                                    debug!("Text pasted successfully in {:?}", paste_time.elapsed())
+                                }
+                                Err(e) => error!("Failed to paste transcription: {}", e),
+                            }
+                            utils::hide_recording_overlay(&ah_clone);
+                            change_tray_icon(&ah_clone, TrayIconState::Idle);
+                        })
+                        .unwrap_or_else(|e| {
+                            error!("Failed to run paste on main thread: {:?}", e);
+                            utils::hide_recording_overlay(&ah);
+                            change_tray_icon(&ah, TrayIconState::Idle);
+                        });
+                    } else {
+                        utils::hide_recording_overlay(&ah);
+                        change_tray_icon(&ah, TrayIconState::Idle);
+                    }
+                } else {
+                    debug!("No samples retrieved from recording stop");
+                    utils::hide_recording_overlay(&ah);
+                    change_tray_icon(&ah, TrayIconState::Idle);
+                }
+            } else if is_mistral_api {
                 // Mistral streaming mode: stop session, get final text
                 rm.disable_audio_streaming();
 
@@ -456,13 +653,12 @@ impl ShortcutAction for TranscribeAction {
 
                     // Save to history — concatenate original + translation
                     let hm_clone = Arc::clone(&hm);
-                    let transcription_for_history = if settings.streaming_translation_enabled
-                        && text != final_text
-                    {
-                        format!("{}\n\n---\n\n{}", final_text, text)
-                    } else {
-                        final_text.clone()
-                    };
+                    let transcription_for_history =
+                        if settings.streaming_translation_enabled && text != final_text {
+                            format!("{}\n\n---\n\n{}", final_text, text)
+                        } else {
+                            final_text.clone()
+                        };
                     let pp_text = post_processed_text.clone();
                     let pp_prompt = post_process_prompt_text.clone();
                     tauri::async_runtime::spawn(async move {

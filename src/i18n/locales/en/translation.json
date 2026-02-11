@@ -109,7 +109,8 @@
       "multiLanguage": "Multi-language",
       "languageOnly": "{{language}} Only",
       "translation": "Can translate to English",
-      "translate": "Translate to English"
+      "translate": "Translate to English",
+      "realtime": "Real-time"
     }
   },
   "settings": {
@@ -122,6 +123,11 @@
     "streamingTranslation": {
       "label": "Live Translation to English",
       "description": "Translate transcription to English in real-time using Mistral AI"
+    },
+    "realtimeTranscription": {
+      "label": "Real-time Transcription",
+      "description": "Show live transcription text as you speak",
+      "requiredForCloud": "Required for cloud models"
     },
     "general": {
       "title": "General",

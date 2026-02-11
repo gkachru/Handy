@@ -356,14 +356,18 @@ fn calculate_streaming_overlay_position(
     None
 }
 
-/// Shows the streaming overlay window with expanded dimensions for live text
-pub fn show_streaming_overlay(app_handle: &AppHandle) {
+/// Shows the streaming overlay window with expanded dimensions for live text.
+/// When `with_translation` is true and the user has streaming translation enabled,
+/// the overlay will show a split view with original + translation panels.
+pub fn show_streaming_overlay_ext(app_handle: &AppHandle, with_translation: bool) {
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
         return;
     }
 
-    let (overlay_width, overlay_height) = if settings.streaming_translation_enabled {
+    let show_translation = with_translation && settings.streaming_translation_enabled;
+
+    let (overlay_width, overlay_height) = if show_translation {
         (STREAMING_TRANSLATION_WIDTH, STREAMING_TRANSLATION_HEIGHT)
     } else {
         (STREAMING_OVERLAY_WIDTH, STREAMING_OVERLAY_HEIGHT)
@@ -396,13 +400,19 @@ pub fn show_streaming_overlay(app_handle: &AppHandle) {
         #[cfg(target_os = "windows")]
         force_overlay_topmost(&overlay_window);
 
-        let overlay_state = if settings.streaming_translation_enabled {
+        let overlay_state = if show_translation {
             "streaming-translation"
         } else {
             "streaming"
         };
         let _ = overlay_window.emit("show-overlay", overlay_state);
     }
+}
+
+/// Shows the streaming overlay window with expanded dimensions for live text.
+/// Respects the streaming_translation_enabled setting for translation panel.
+pub fn show_streaming_overlay(app_handle: &AppHandle) {
+    show_streaming_overlay_ext(app_handle, true);
 }
 
 /// Updates the overlay window position based on current settings
