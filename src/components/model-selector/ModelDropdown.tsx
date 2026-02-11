@@ -55,6 +55,11 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                         {t("modelSelector.custom")}
                       </span>
                     )}
+                    {model.engine_type === "MistralApi" && (
+                      <span className="ms-1.5 text-[10px] font-medium text-blue-400 uppercase">
+                        {t("modelSelector.cloud")}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-text/40 italic pe-4">
                     {getTranslatedModelDescription(model, t)}

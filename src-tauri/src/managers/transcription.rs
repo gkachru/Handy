@@ -226,6 +226,25 @@ impl TranscriptionManager {
             return Err(anyhow::anyhow!(error_msg));
         }
 
+        // Cloud-based models don't need a local engine
+        if matches!(model_info.engine_type, EngineType::MistralApi) {
+            {
+                let mut current_model = self.current_model_id.lock().unwrap();
+                *current_model = Some(model_id.to_string());
+            }
+            let _ = self.app_handle.emit(
+                "model-state-changed",
+                ModelStateEvent {
+                    event_type: "loading_completed".to_string(),
+                    model_id: Some(model_id.to_string()),
+                    model_name: Some(model_info.name.clone()),
+                    error: None,
+                },
+            );
+            info!("Mistral API model selected (no local engine to load)");
+            return Ok(());
+        }
+
         let model_path = self.model_manager.get_model_path(model_id)?;
 
         // Create appropriate engine based on model type
@@ -310,6 +329,10 @@ impl TranscriptionManager {
                     })?;
                 LoadedEngine::SenseVoice(engine)
             }
+            EngineType::MistralApi => {
+                // Should never reach here — MistralApi has an early return above
+                unreachable!("MistralApi engine type should be handled before engine loading")
+            }
         };
 
         // Update the current engine and model ID
@@ -365,6 +388,16 @@ impl TranscriptionManager {
     pub fn get_current_model(&self) -> Option<String> {
         let current_model = self.current_model_id.lock().unwrap();
         current_model.clone()
+    }
+
+    /// Check if the currently selected model is a Mistral API cloud model
+    pub fn is_mistral_api(&self) -> bool {
+        if let Some(model_id) = self.get_current_model() {
+            if let Some(info) = self.model_manager.get_model_info(&model_id) {
+                return matches!(info.engine_type, EngineType::MistralApi);
+            }
+        }
+        false
     }
 
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {

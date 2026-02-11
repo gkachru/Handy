@@ -22,6 +22,7 @@ pub enum EngineType {
     Parakeet,
     Moonshine,
     SenseVoice,
+    MistralApi,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -321,6 +322,43 @@ impl ModelManager {
             },
         );
 
+        // Mistral API real-time streaming model (cloud-based, no download needed)
+        let mistral_languages: Vec<String> = vec![
+            "en", "zh", "zh-Hans", "zh-Hant", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl",
+            "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs",
+            "ro", "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "ml", "cy", "sk",
+            "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "eu", "is", "hy", "ne",
+            "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "yo", "so", "af", "ka",
+            "be", "tg", "sd", "gu", "am", "lo", "uz", "fo", "ht", "ps", "nn", "mt", "sa", "lb",
+            "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su", "yue",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        available_models.insert(
+            "mistral-voxtral-realtime".to_string(),
+            ModelInfo {
+                id: "mistral-voxtral-realtime".to_string(),
+                name: "Voxtral Realtime (Cloud)".to_string(),
+                description: "Mistral API — real-time streaming transcription".to_string(),
+                filename: "".to_string(),
+                url: None,
+                size_mb: 0,
+                is_downloaded: true,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: false,
+                engine_type: EngineType::MistralApi,
+                accuracy_score: 0.9,
+                speed_score: 1.0,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: mistral_languages,
+                is_custom: false,
+            },
+        );
+
         // Auto-discover custom Whisper models (.bin files) in the models directory
         if let Err(e) = Self::discover_custom_whisper_models(&models_dir, &mut available_models) {
             warn!("Failed to discover custom models: {}", e);
@@ -604,6 +642,11 @@ impl ModelManager {
 
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+
+        // Cloud-based models don't need downloading
+        if matches!(model_info.engine_type, EngineType::MistralApi) {
+            return Ok(());
+        }
 
         let url = model_info
             .url

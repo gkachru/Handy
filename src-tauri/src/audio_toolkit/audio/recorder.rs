@@ -19,6 +19,8 @@ use crate::audio_toolkit::{
 enum Cmd {
     Start,
     Stop(mpsc::Sender<Vec<f32>>),
+    EnableStreaming(mpsc::Sender<Vec<f32>>),
+    DisableStreaming,
     Shutdown,
 }
 
@@ -143,6 +145,21 @@ impl AudioRecorder {
         Ok(resp_rx.recv()?) // wait for the samples
     }
 
+    pub fn enable_streaming(&self) -> Result<mpsc::Receiver<Vec<f32>>, Box<dyn std::error::Error>> {
+        let (tx, rx) = mpsc::channel();
+        if let Some(cmd_tx) = &self.cmd_tx {
+            cmd_tx.send(Cmd::EnableStreaming(tx))?;
+        }
+        Ok(rx)
+    }
+
+    pub fn disable_streaming(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(cmd_tx) = &self.cmd_tx {
+            let _ = cmd_tx.send(Cmd::DisableStreaming);
+        }
+        Ok(())
+    }
+
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(tx) = self.cmd_tx.take() {
             let _ = tx.send(Cmd::Shutdown);
@@ -254,6 +271,7 @@ fn run_consumer(
 
     let mut processed_samples = Vec::<f32>::new();
     let mut recording = false;
+    let mut stream_tx: Option<mpsc::Sender<Vec<f32>>> = None;
 
     // ---------- spectrum visualisation setup ---------------------------- //
     const BUCKETS: usize = 16;
@@ -302,6 +320,12 @@ fn run_consumer(
 
         // ---------- existing pipeline ------------------------------------ //
         frame_resampler.push(&raw, &mut |frame: &[f32]| {
+            // Send raw resampled audio to streaming consumer (before VAD)
+            if recording {
+                if let Some(ref tx) = stream_tx {
+                    let _ = tx.send(frame.to_vec());
+                }
+            }
             handle_frame(frame, recording, &vad, &mut processed_samples)
         });
 
@@ -325,6 +349,12 @@ fn run_consumer(
                     });
 
                     let _ = reply_tx.send(std::mem::take(&mut processed_samples));
+                }
+                Cmd::EnableStreaming(tx) => {
+                    stream_tx = Some(tx);
+                }
+                Cmd::DisableStreaming => {
+                    stream_tx = None;
                 }
                 Cmd::Shutdown => return,
             }

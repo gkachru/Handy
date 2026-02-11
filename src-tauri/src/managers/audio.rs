@@ -414,6 +414,20 @@ impl AudioRecordingManager {
             _ => None,
         }
     }
+    pub fn enable_audio_streaming(&self) -> Option<std::sync::mpsc::Receiver<Vec<f32>>> {
+        if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
+            rec.enable_streaming().ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn disable_audio_streaming(&self) {
+        if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
+            let _ = rec.disable_streaming();
+        }
+    }
+
     pub fn is_recording(&self) -> bool {
         matches!(
             *self.state.lock().unwrap(),

@@ -100,6 +100,7 @@
     "noModelDownloadRequired": "No Model - Download Required",
     "deleteModel": "Delete {{modelName}}",
     "downloadSpeed": "{{speed}} MB/s",
+    "cloud": "Cloud",
     "cancel": "Cancel",
     "cancelDownload": "Cancel download",
     "capabilities": {
@@ -112,6 +113,8 @@
     }
   },
   "settings": {
+    "mistralApiKey": "Mistral API Key",
+    "mistralApiKeyPlaceholder": "Enter your Mistral API key",
     "modelSettings": {
       "title": "{{model}} Settings",
       "noSettingsNeeded": "This model works automatically with no configuration needed."
@@ -521,6 +524,7 @@
   },
   "overlay": {
     "transcribing": "Transcribing...",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "streaming": "Listening..."
   }
 }

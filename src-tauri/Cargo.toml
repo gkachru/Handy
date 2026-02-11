@@ -71,6 +71,8 @@ flate2 = "1.0"
 transcribe-rs = { version = "0.2.3", features = ["whisper", "parakeet", "moonshine", "sense_voice"] }
 handy-keys = "0.2.0"
 ferrous-opencc = "0.2.3"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+base64 = "0.22"
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }

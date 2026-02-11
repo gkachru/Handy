@@ -1052,3 +1052,12 @@ pub fn change_show_tray_icon_setting(app: AppHandle, enabled: bool) -> Result<()
 
     Ok(())
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_mistral_api_key(app: AppHandle, api_key: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.mistral_api_key = api_key;
+    settings::write_settings(&app, settings);
+    Ok(())
+}

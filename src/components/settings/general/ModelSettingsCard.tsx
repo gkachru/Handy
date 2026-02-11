@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { SettingsGroup } from "../../ui/SettingsGroup";
 import { LanguageSelector } from "../LanguageSelector";
 import { TranslateToEnglish } from "../TranslateToEnglish";
+import { MistralApiKey } from "./MistralApiKey";
 import { useModelStore } from "../../../stores/modelStore";
 import type { ModelInfo } from "@/bindings";
 
@@ -12,11 +13,13 @@ export const ModelSettingsCard: React.FC = () => {
 
   const currentModelInfo = models.find((m: ModelInfo) => m.id === currentModel);
 
+  const isMistralApi = currentModelInfo?.engine_type === "MistralApi";
   const supportsLanguageSelection =
     currentModelInfo?.engine_type === "Whisper" ||
     currentModelInfo?.engine_type === "SenseVoice";
   const supportsTranslation = currentModelInfo?.supports_translation ?? false;
-  const hasAnySettings = supportsLanguageSelection || supportsTranslation;
+  const hasAnySettings =
+    supportsLanguageSelection || supportsTranslation || isMistralApi;
 
   // Don't render anything if no model is selected or no settings available
   if (!currentModel || !currentModelInfo || !hasAnySettings) {
@@ -29,6 +32,7 @@ export const ModelSettingsCard: React.FC = () => {
         model: currentModelInfo.name,
       })}
     >
+      {isMistralApi && <MistralApiKey />}
       {supportsLanguageSelection && (
         <LanguageSelector
           descriptionMode="tooltip"

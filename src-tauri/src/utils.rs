@@ -1,3 +1,4 @@
+use crate::actions::MistralSessionState;
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::shortcut;
@@ -29,8 +30,21 @@ pub fn cancel_current_operation(app: &AppHandle) {
         warn!("Failed to lock toggle state manager during cancellation");
     }
 
-    // Cancel any ongoing recording
+    // Stop any active Mistral streaming session
+    {
+        let session_state = app.state::<MistralSessionState>();
+        let mut session_opt = session_state.0.lock().unwrap();
+        if session_opt.is_some() {
+            session_opt.take(); // Drop the session (stop signal handled by Drop)
+            info!("Mistral streaming session cancelled");
+        }
+    }
+
+    // Disable audio streaming
     let audio_manager = app.state::<Arc<AudioRecordingManager>>();
+    audio_manager.disable_audio_streaming();
+
+    // Cancel any ongoing recording
     audio_manager.cancel_recording();
 
     // Update tray icon and hide overlay
