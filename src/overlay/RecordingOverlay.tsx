@@ -11,7 +11,12 @@ import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 
-type OverlayState = "recording" | "transcribing" | "processing" | "streaming";
+type OverlayState =
+  | "recording"
+  | "transcribing"
+  | "processing"
+  | "streaming"
+  | "streaming-translation";
 
 const RecordingOverlay: React.FC = () => {
   const { t } = useTranslation();
@@ -19,8 +24,10 @@ const RecordingOverlay: React.FC = () => {
   const [state, setState] = useState<OverlayState>("recording");
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const [streamingText, setStreamingText] = useState("");
+  const [translationText, setTranslationText] = useState("");
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const textAreaRef = useRef<HTMLDivElement>(null);
+  const translationRef = useRef<HTMLDivElement>(null);
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
@@ -31,8 +38,12 @@ const RecordingOverlay: React.FC = () => {
         await syncLanguageFromSettings();
         const overlayState = event.payload as OverlayState;
         setState(overlayState);
-        if (overlayState === "streaming") {
+        if (
+          overlayState === "streaming" ||
+          overlayState === "streaming-translation"
+        ) {
           setStreamingText("");
+          setTranslationText("");
         }
         setIsVisible(true);
       });
@@ -64,12 +75,21 @@ const RecordingOverlay: React.FC = () => {
         },
       );
 
+      // Listen for streaming translation updates
+      const unlistenTranslation = await listen<string>(
+        "streaming-translation-update",
+        (event) => {
+          setTranslationText(event.payload);
+        },
+      );
+
       // Cleanup function
       return () => {
         unlistenShow();
         unlistenHide();
         unlistenLevel();
         unlistenStreaming();
+        unlistenTranslation();
       };
     };
 
@@ -83,6 +103,13 @@ const RecordingOverlay: React.FC = () => {
     }
   }, [streamingText]);
 
+  // Auto-scroll translation text to bottom
+  useEffect(() => {
+    if (translationRef.current) {
+      translationRef.current.scrollTop = translationRef.current.scrollHeight;
+    }
+  }, [translationText]);
+
   const getIcon = () => {
     if (state === "recording") {
       return <MicrophoneIcon />;
@@ -91,7 +118,9 @@ const RecordingOverlay: React.FC = () => {
     }
   };
 
-  const isStreaming = state === "streaming";
+  const isStreaming =
+    state === "streaming" || state === "streaming-translation";
+  const isTranslationMode = state === "streaming-translation";
 
   return (
     <div
@@ -103,15 +132,43 @@ const RecordingOverlay: React.FC = () => {
           <div className="streaming-indicator">
             <div className="streaming-dot" />
           </div>
-          <div className="streaming-text-area" ref={textAreaRef}>
-            {streamingText ? (
-              <span>{streamingText}</span>
-            ) : (
-              <span className="streaming-placeholder">
-                {t("overlay.streaming")}
-              </span>
-            )}
-          </div>
+          {isTranslationMode ? (
+            <div className="streaming-split-view">
+              <div className="streaming-original" dir="rtl" ref={textAreaRef}>
+                {streamingText ? (
+                  <span>{streamingText}</span>
+                ) : (
+                  <span className="streaming-placeholder">
+                    {t("overlay.streaming")}
+                  </span>
+                )}
+              </div>
+              <div className="streaming-divider" />
+              <div
+                className="streaming-translation"
+                dir="ltr"
+                ref={translationRef}
+              >
+                {translationText ? (
+                  <span>{translationText}</span>
+                ) : (
+                  <span className="streaming-placeholder">
+                    {t("overlay.translating")}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="streaming-text-area" ref={textAreaRef}>
+              {streamingText ? (
+                <span>{streamingText}</span>
+              ) : (
+                <span className="streaming-placeholder">
+                  {t("overlay.streaming")}
+                </span>
+              )}
+            </div>
+          )}
           <div className="streaming-right">
             <div
               className="cancel-button"
@@ -151,9 +208,7 @@ const RecordingOverlay: React.FC = () => {
               </div>
             )}
             {state === "processing" && (
-              <div className="transcribing-text">
-                {t("overlay.processing")}
-              </div>
+              <div className="transcribing-text">{t("overlay.processing")}</div>
             )}
           </div>
 

@@ -133,6 +133,8 @@ const settingUpdaters: {
     commands.changeExperimentalEnabledSetting(value as boolean),
   show_tray_icon: (value) =>
     commands.changeShowTrayIconSetting(value as boolean),
+  streaming_translation_enabled: (value) =>
+    commands.changeStreamingTranslationSetting(value as boolean),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

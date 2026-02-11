@@ -176,9 +176,24 @@
   z-index: 3;
   opacity: 0.3;
   background:
-    linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.5) 50%, transparent 52%),
-    linear-gradient(135deg, transparent 62%, rgba(255, 255, 255, 0.5) 62%, transparent 64%),
-    linear-gradient(135deg, transparent 74%, rgba(255, 255, 255, 0.5) 74%, transparent 76%);
+    linear-gradient(
+      135deg,
+      transparent 50%,
+      rgba(255, 255, 255, 0.5) 50%,
+      transparent 52%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 62%,
+      rgba(255, 255, 255, 0.5) 62%,
+      transparent 64%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 74%,
+      rgba(255, 255, 255, 0.5) 74%,
+      transparent 76%
+    );
 }
 
 .streaming-resize-handle:hover {
@@ -188,6 +203,70 @@
 .streaming-placeholder {
   opacity: 0.5;
   font-style: italic;
+}
+
+/* Split view for streaming translation */
+.streaming-split-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 36px 0 20px;
+  box-sizing: border-box;
+}
+
+.streaming-original {
+  flex: 2;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.4;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-wrap: break-word;
+}
+
+.streaming-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  margin: 4px 0;
+}
+
+.streaming-translation {
+  flex: 3;
+  color: white;
+  font-size: 14px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-wrap: break-word;
+}
+
+.streaming-original::-webkit-scrollbar,
+.streaming-translation::-webkit-scrollbar {
+  width: 6px;
+}
+
+.streaming-original::-webkit-scrollbar-track,
+.streaming-translation::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.streaming-original::-webkit-scrollbar-thumb,
+.streaming-translation::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+}
+
+.streaming-original::-webkit-scrollbar-thumb:hover,
+.streaming-translation::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.6);
 }
 
 @keyframes streaming-pulse {

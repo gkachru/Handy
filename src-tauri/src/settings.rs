@@ -358,6 +358,8 @@ pub struct AppSettings {
     pub typing_tool: TypingTool,
     #[serde(default)]
     pub mistral_api_key: String,
+    #[serde(default)]
+    pub streaming_translation_enabled: bool,
 }
 
 fn default_model() -> String {
@@ -690,6 +692,7 @@ pub fn get_default_settings() -> AppSettings {
         paste_delay_ms: default_paste_delay_ms(),
         typing_tool: default_typing_tool(),
         mistral_api_key: String::new(),
+        streaming_translation_enabled: false,
     }
 }
 

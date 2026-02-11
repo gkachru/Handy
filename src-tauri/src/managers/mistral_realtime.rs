@@ -94,6 +94,11 @@ impl MistralRealtimeSession {
         }
     }
 
+    /// Get a shared reference to the accumulated transcription text.
+    pub fn get_text_ref(&self) -> Arc<Mutex<String>> {
+        self.final_text.clone()
+    }
+
     /// Signal the session to stop and wait for the final transcription text.
     pub async fn stop(&mut self) -> String {
         self.stop_signal.store(true, Ordering::Relaxed);
@@ -342,8 +347,7 @@ impl MistralRealtimeSession {
                 let _ = ws_sink.send(tungstenite::Message::Text(json.into())).await;
 
                 // Wait for receiver to get transcription.done
-                let _ =
-                    tokio::time::timeout(std::time::Duration::from_secs(3), recv_handle).await;
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(3), recv_handle).await;
                 return Ok(());
             }
 

@@ -325,8 +325,14 @@ pub fn show_processing_overlay(app_handle: &AppHandle) {
 
 const STREAMING_OVERLAY_WIDTH: f64 = 520.0;
 const STREAMING_OVERLAY_HEIGHT: f64 = 130.0;
+const STREAMING_TRANSLATION_WIDTH: f64 = 520.0;
+const STREAMING_TRANSLATION_HEIGHT: f64 = 220.0;
 
-fn calculate_streaming_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
+fn calculate_streaming_overlay_position(
+    app_handle: &AppHandle,
+    width: f64,
+    height: f64,
+) -> Option<(f64, f64)> {
     if let Some(monitor) = get_monitor_with_cursor(app_handle) {
         let work_area = monitor.work_area();
         let scale = monitor.scale_factor();
@@ -337,11 +343,11 @@ fn calculate_streaming_overlay_position(app_handle: &AppHandle) -> Option<(f64, 
 
         let settings = settings::get_settings(app_handle);
 
-        let x = work_area_x + (work_area_width - STREAMING_OVERLAY_WIDTH) / 2.0;
+        let x = work_area_x + (work_area_width - width) / 2.0;
         let y = match settings.overlay_position {
             OverlayPosition::Top => work_area_y + OVERLAY_TOP_OFFSET,
             OverlayPosition::Bottom | OverlayPosition::None => {
-                work_area_y + work_area_height - STREAMING_OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET
+                work_area_y + work_area_height - height - OVERLAY_BOTTOM_OFFSET
             }
         };
 
@@ -357,6 +363,12 @@ pub fn show_streaming_overlay(app_handle: &AppHandle) {
         return;
     }
 
+    let (overlay_width, overlay_height) = if settings.streaming_translation_enabled {
+        (STREAMING_TRANSLATION_WIDTH, STREAMING_TRANSLATION_HEIGHT)
+    } else {
+        (STREAMING_OVERLAY_WIDTH, STREAMING_OVERLAY_HEIGHT)
+    };
+
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
         // Enable resizing for the streaming overlay
         let _ = overlay_window.set_resizable(true);
@@ -367,12 +379,14 @@ pub fn show_streaming_overlay(app_handle: &AppHandle) {
 
         // Resize to streaming dimensions
         let _ = overlay_window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: STREAMING_OVERLAY_WIDTH,
-            height: STREAMING_OVERLAY_HEIGHT,
+            width: overlay_width,
+            height: overlay_height,
         }));
 
         // Reposition for the larger size
-        if let Some((x, y)) = calculate_streaming_overlay_position(app_handle) {
+        if let Some((x, y)) =
+            calculate_streaming_overlay_position(app_handle, overlay_width, overlay_height)
+        {
             let _ = overlay_window
                 .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
         }
@@ -382,7 +396,12 @@ pub fn show_streaming_overlay(app_handle: &AppHandle) {
         #[cfg(target_os = "windows")]
         force_overlay_topmost(&overlay_window);
 
-        let _ = overlay_window.emit("show-overlay", "streaming");
+        let overlay_state = if settings.streaming_translation_enabled {
+            "streaming-translation"
+        } else {
+            "streaming"
+        };
+        let _ = overlay_window.emit("show-overlay", overlay_state);
     }
 }
 

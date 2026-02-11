@@ -4,12 +4,15 @@ import { SettingsGroup } from "../../ui/SettingsGroup";
 import { LanguageSelector } from "../LanguageSelector";
 import { TranslateToEnglish } from "../TranslateToEnglish";
 import { MistralApiKey } from "./MistralApiKey";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { useModelStore } from "../../../stores/modelStore";
+import { useSettings } from "../../../hooks/useSettings";
 import type { ModelInfo } from "@/bindings";
 
 export const ModelSettingsCard: React.FC = () => {
   const { t } = useTranslation();
   const { currentModel, models } = useModelStore();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
 
   const currentModelInfo = models.find((m: ModelInfo) => m.id === currentModel);
 
@@ -26,6 +29,9 @@ export const ModelSettingsCard: React.FC = () => {
     return null;
   }
 
+  const streamingTranslationEnabled =
+    getSetting("streaming_translation_enabled") || false;
+
   return (
     <SettingsGroup
       title={t("settings.modelSettings.title", {
@@ -33,6 +39,19 @@ export const ModelSettingsCard: React.FC = () => {
       })}
     >
       {isMistralApi && <MistralApiKey />}
+      {isMistralApi && (
+        <ToggleSwitch
+          checked={streamingTranslationEnabled}
+          onChange={(enabled) =>
+            updateSetting("streaming_translation_enabled", enabled)
+          }
+          isUpdating={isUpdating("streaming_translation_enabled")}
+          label={t("settings.streamingTranslation.label")}
+          description={t("settings.streamingTranslation.description")}
+          descriptionMode="tooltip"
+          grouped={true}
+        />
+      )}
       {supportsLanguageSelection && (
         <LanguageSelector
           descriptionMode="tooltip"
@@ -40,7 +59,7 @@ export const ModelSettingsCard: React.FC = () => {
           supportedLanguages={currentModelInfo.supported_languages}
         />
       )}
-      {supportsTranslation && (
+      {supportsTranslation && !isMistralApi && (
         <TranslateToEnglish descriptionMode="tooltip" grouped={true} />
       )}
     </SettingsGroup>

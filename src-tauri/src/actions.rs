@@ -4,6 +4,7 @@ use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, S
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::mistral_realtime::MistralRealtimeSession;
+use crate::managers::streaming_translator::{self, StreamingTranslator};
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
@@ -14,7 +15,7 @@ use crate::utils::{
 };
 use crate::ManagedToggleState;
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,9 @@ use tauri::Manager;
 
 /// Managed state for an active Mistral streaming session
 pub struct MistralSessionState(pub Mutex<Option<MistralRealtimeSession>>);
+
+/// Managed state for an active streaming translator
+pub struct StreamingTranslatorState(pub Mutex<Option<StreamingTranslator>>);
 
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
@@ -294,6 +298,20 @@ impl ShortcutAction for TranscribeAction {
                         settings.mistral_api_key.clone(),
                         audio_rx,
                     );
+
+                    // Start streaming translator if enabled
+                    if settings.streaming_translation_enabled {
+                        let text_ref = session.get_text_ref();
+                        let translator = StreamingTranslator::start(
+                            app.clone(),
+                            settings.mistral_api_key.clone(),
+                            text_ref,
+                        );
+                        let translator_state = app.state::<StreamingTranslatorState>();
+                        *translator_state.0.lock().unwrap() = Some(translator);
+                        info!("Streaming translator started");
+                    }
+
                     let session_state = app.state::<MistralSessionState>();
                     *session_state.0.lock().unwrap() = Some(session);
                     info!("Mistral realtime streaming session started");
@@ -351,6 +369,15 @@ impl ShortcutAction for TranscribeAction {
                 // Mistral streaming mode: stop session, get final text
                 rm.disable_audio_streaming();
 
+                // Stop the periodic translator
+                {
+                    let ts = ah.state::<StreamingTranslatorState>();
+                    let mut guard = ts.0.lock().unwrap();
+                    if let Some(mut translator) = guard.take() {
+                        translator.stop();
+                    }
+                }
+
                 let session = {
                     let session_state = ah.state::<MistralSessionState>();
                     let session = session_state.0.lock().unwrap().take();
@@ -369,9 +396,33 @@ impl ShortcutAction for TranscribeAction {
                     let settings = get_settings(&ah);
                     let mut text = final_text.clone();
 
-                    // Apply Chinese variant conversion
-                    if let Some(converted) = maybe_convert_chinese_variant(&settings, &text).await {
-                        text = converted;
+                    // Final high-quality translation if streaming translation is enabled
+                    if settings.streaming_translation_enabled {
+                        if let Some(translated) = streaming_translator::translate_with_mistral(
+                            &settings.mistral_api_key,
+                            "mistral-medium-latest",
+                            &final_text,
+                        )
+                        .await
+                        {
+                            info!(
+                                "Final translation completed ({} chars -> {} chars)",
+                                final_text.len(),
+                                translated.len()
+                            );
+                            text = translated;
+                        } else {
+                            warn!("Final translation failed, using original text");
+                        }
+                    }
+
+                    // Apply Chinese variant conversion (only if not translated)
+                    if !settings.streaming_translation_enabled {
+                        if let Some(converted) =
+                            maybe_convert_chinese_variant(&settings, &text).await
+                        {
+                            text = converted;
+                        }
                     }
 
                     // Apply LLM post-processing if applicable
@@ -395,13 +446,23 @@ impl ShortcutAction for TranscribeAction {
                                 }
                             }
                         }
-                    } else if text != final_text {
+                    }
+
+                    // Always store the final text as post-processed if it differs
+                    // from the original (e.g. translation was applied)
+                    if post_processed_text.is_none() && text != final_text {
                         post_processed_text = Some(text.clone());
                     }
 
-                    // Save to history
+                    // Save to history — concatenate original + translation
                     let hm_clone = Arc::clone(&hm);
-                    let transcription_for_history = final_text.clone();
+                    let transcription_for_history = if settings.streaming_translation_enabled
+                        && text != final_text
+                    {
+                        format!("{}\n\n---\n\n{}", final_text, text)
+                    } else {
+                        final_text.clone()
+                    };
                     let pp_text = post_processed_text.clone();
                     let pp_prompt = post_process_prompt_text.clone();
                     tauri::async_runtime::spawn(async move {

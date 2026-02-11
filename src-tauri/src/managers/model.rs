@@ -352,7 +352,7 @@ impl ModelManager {
                 engine_type: EngineType::MistralApi,
                 accuracy_score: 0.9,
                 speed_score: 1.0,
-                supports_translation: false,
+                supports_translation: true,
                 is_recommended: false,
                 supported_languages: mistral_languages,
                 is_custom: false,

@@ -7,9 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 export const MistralApiKey: React.FC = () => {
   const { t } = useTranslation();
   const settings = useSettingsStore((s) => s.settings);
-  const [localValue, setLocalValue] = useState(
-    settings?.mistral_api_key ?? "",
-  );
+  const [localValue, setLocalValue] = useState(settings?.mistral_api_key ?? "");
 
   useEffect(() => {
     setLocalValue(settings?.mistral_api_key ?? "");

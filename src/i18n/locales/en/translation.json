@@ -119,6 +119,10 @@
       "title": "{{model}} Settings",
       "noSettingsNeeded": "This model works automatically with no configuration needed."
     },
+    "streamingTranslation": {
+      "label": "Live Translation to English",
+      "description": "Translate transcription to English in real-time using Mistral AI"
+    },
     "general": {
       "title": "General",
       "shortcut": {
@@ -525,6 +529,7 @@
   "overlay": {
     "transcribing": "Transcribing...",
     "processing": "Processing...",
-    "streaming": "Listening..."
+    "streaming": "Listening...",
+    "translating": "Translating..."
   }
 }
