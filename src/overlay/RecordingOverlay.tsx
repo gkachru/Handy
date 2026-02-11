@@ -9,7 +9,7 @@ import {
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
-import { getLanguageDirection } from "@/lib/utils/rtl";
+import { getLanguageDirection, detectTextDirection } from "@/lib/utils/rtl";
 
 type OverlayState =
   | "recording"
@@ -29,6 +29,12 @@ const RecordingOverlay: React.FC = () => {
   const textAreaRef = useRef<HTMLDivElement>(null);
   const translationRef = useRef<HTMLDivElement>(null);
   const direction = getLanguageDirection(i18n.language);
+  const streamingDir = streamingText
+    ? detectTextDirection(streamingText)
+    : "ltr";
+  const translationDir = translationText
+    ? detectTextDirection(translationText)
+    : "ltr";
 
   useEffect(() => {
     const setupEventListeners = async () => {
@@ -134,7 +140,7 @@ const RecordingOverlay: React.FC = () => {
           </div>
           {isTranslationMode ? (
             <div className="streaming-split-view">
-              <div className="streaming-original" dir="rtl" ref={textAreaRef}>
+              <div className="streaming-original" dir={streamingDir} ref={textAreaRef}>
                 {streamingText ? (
                   <span>{streamingText}</span>
                 ) : (
@@ -146,7 +152,7 @@ const RecordingOverlay: React.FC = () => {
               <div className="streaming-divider" />
               <div
                 className="streaming-translation"
-                dir="ltr"
+                dir={translationDir}
                 ref={translationRef}
               >
                 {translationText ? (
@@ -159,7 +165,7 @@ const RecordingOverlay: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="streaming-text-area" ref={textAreaRef}>
+            <div className="streaming-text-area" dir={streamingDir} ref={textAreaRef}>
               {streamingText ? (
                 <span>{streamingText}</span>
               ) : (

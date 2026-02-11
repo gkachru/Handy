@@ -48,6 +48,28 @@ export const updateDocumentLanguage = (lang: string): void => {
 };
 
 /**
+ * Detect text direction from actual content by looking for RTL script characters.
+ * Returns "rtl" if the first strong directional character is RTL, otherwise "ltr".
+ */
+export const detectTextDirection = (text: string): "ltr" | "rtl" => {
+  if (!text) return "ltr";
+  // Match RTL script characters:
+  // - Hebrew: \u0590-\u05FF, \uFB1D-\uFB4F
+  // - Arabic: \u0600-\u06FF, \u0750-\u077F, \u08A0-\u08FF, \uFB50-\uFDFF, \uFE70-\uFEFF
+  // - Syriac: \u0700-\u074F
+  // - Thaana: \u0780-\u07BF
+  const rtlRegex =
+    /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u08A0-\u08FF\uFB1D-\uFB4F\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  const ltrRegex = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/;
+
+  for (const char of text) {
+    if (rtlRegex.test(char)) return "rtl";
+    if (ltrRegex.test(char)) return "ltr";
+  }
+  return "ltr";
+};
+
+/**
  * Initialize RTL support for the current document
  * Should be called when the app initializes and when language changes
  * @param langCode - The current language code
