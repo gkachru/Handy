@@ -125,6 +125,8 @@ const settingUpdaters: {
     commands.setPostProcessSelectedPrompt(value as string),
   mute_while_recording: (value) =>
     commands.changeMuteWhileRecordingSetting(value as boolean),
+  mute_microphone_while_recording: (value) =>
+    commands.changeMuteMicrophoneWhileRecordingSetting(value as boolean),
   append_trailing_space: (value) =>
     commands.changeAppendTrailingSpaceSetting(value as boolean),
   log_level: (value) => commands.setLogLevel(value as any),
@@ -137,6 +139,8 @@ const settingUpdaters: {
     commands.changeStreamingTranslationSetting(value as boolean),
   realtime_transcription_enabled: (value) =>
     commands.changeRealtimeTranscriptionSetting(value as boolean),
+  audio_source: (value) =>
+    commands.changeAudioSourceSetting(value as string),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

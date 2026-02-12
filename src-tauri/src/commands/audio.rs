@@ -200,3 +200,17 @@ pub fn is_recording(app: AppHandle) -> bool {
     let audio_manager = app.state::<Arc<AudioRecordingManager>>();
     audio_manager.is_recording()
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn is_system_audio_available() -> bool {
+    crate::audio_toolkit::system_audio::is_available()
+}
+
+/// Trigger ScreenCaptureKit so macOS registers this app in the
+/// Screen Recording permission list in System Settings.
+#[tauri::command]
+#[specta::specta]
+pub fn register_screen_recording() {
+    crate::audio_toolkit::system_audio::prompt_screen_recording_registration();
+}

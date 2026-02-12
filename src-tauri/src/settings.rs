@@ -126,6 +126,19 @@ pub enum ModelUnloadTimeout {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
+pub enum AudioSource {
+    Microphone,
+    SystemAudio,
+}
+
+impl Default for AudioSource {
+    fn default() -> Self {
+        AudioSource::Microphone
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
     CtrlV,
     Direct,
@@ -343,6 +356,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
+    pub mute_microphone_while_recording: bool,
+    #[serde(default)]
     pub append_trailing_space: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
@@ -362,6 +377,8 @@ pub struct AppSettings {
     pub streaming_translation_enabled: bool,
     #[serde(default = "default_realtime_transcription_enabled")]
     pub realtime_transcription_enabled: bool,
+    #[serde(default)]
+    pub audio_source: AudioSource,
 }
 
 fn default_model() -> String {
@@ -690,6 +707,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_prompts: default_post_process_prompts(),
         post_process_selected_prompt_id: None,
         mute_while_recording: false,
+        mute_microphone_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),
         experimental_enabled: false,
@@ -700,6 +718,7 @@ pub fn get_default_settings() -> AppSettings {
         mistral_api_key: String::new(),
         streaming_translation_enabled: false,
         realtime_transcription_enabled: true,
+        audio_source: AudioSource::default(),
     }
 }
 

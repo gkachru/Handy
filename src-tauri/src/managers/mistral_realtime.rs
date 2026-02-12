@@ -338,6 +338,11 @@ impl MistralRealtimeSession {
 
         // Sender loop: read from audio_rx, send to WebSocket
         loop {
+            // Detect server-side disconnect/error (receiver task ended)
+            if recv_handle.is_finished() {
+                return Err("Server disconnected or sent error".to_string());
+            }
+
             if stop.load(Ordering::Relaxed) {
                 // Send input_audio.end
                 let end_msg = AudioEndMessage {

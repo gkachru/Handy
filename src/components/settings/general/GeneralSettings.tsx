@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { MicrophoneSelector } from "../MicrophoneSelector";
+import { AudioSourceSelector } from "../AudioSourceSelector";
 import { ShortcutInput } from "../ShortcutInput";
 import { SettingsGroup } from "../../ui/SettingsGroup";
 import { OutputDeviceSelector } from "../OutputDeviceSelector";
@@ -8,7 +9,10 @@ import { PushToTalk } from "../PushToTalk";
 import { AudioFeedback } from "../AudioFeedback";
 import { useSettings } from "../../../hooks/useSettings";
 import { VolumeSlider } from "../VolumeSlider";
-import { MuteWhileRecording } from "../MuteWhileRecording";
+import {
+  MuteSystemAudioWhileRecording,
+  MuteMicrophoneWhileRecording,
+} from "../MuteWhileRecording";
 import { ModelSettingsCard } from "./ModelSettingsCard";
 
 export const GeneralSettings: React.FC = () => {
@@ -22,8 +26,16 @@ export const GeneralSettings: React.FC = () => {
       </SettingsGroup>
       <ModelSettingsCard />
       <SettingsGroup title={t("settings.sound.title")}>
+        <AudioSourceSelector descriptionMode="tooltip" grouped={true} />
         <MicrophoneSelector descriptionMode="tooltip" grouped={true} />
-        <MuteWhileRecording descriptionMode="tooltip" grouped={true} />
+        <MuteSystemAudioWhileRecording
+          descriptionMode="tooltip"
+          grouped={true}
+        />
+        <MuteMicrophoneWhileRecording
+          descriptionMode="tooltip"
+          grouped={true}
+        />
         <AudioFeedback descriptionMode="tooltip" grouped={true} />
         <OutputDeviceSelector
           descriptionMode="tooltip"

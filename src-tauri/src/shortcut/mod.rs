@@ -20,8 +20,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::settings::{
-    self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
-    OverlayPosition, PasteMethod, ShortcutBinding, SoundTheme, TypingTool,
+    self, get_settings, AudioSource, AutoSubmitKey, ClipboardHandling, KeyboardImplementation,
+    LLMPrompt, OverlayPosition, PasteMethod, ShortcutBinding, SoundTheme, TypingTool,
     APPLE_INTELLIGENCE_DEFAULT_MODEL_ID, APPLE_INTELLIGENCE_PROVIDER_ID,
 };
 use crate::tray;
@@ -1020,6 +1020,18 @@ pub fn change_mute_while_recording_setting(app: AppHandle, enabled: bool) -> Res
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_mute_microphone_while_recording_setting(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.mute_microphone_while_recording = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_append_trailing_space_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.append_trailing_space = enabled;
@@ -1078,4 +1090,29 @@ pub fn change_realtime_transcription_setting(app: AppHandle, enabled: bool) -> R
     settings.realtime_transcription_enabled = enabled;
     settings::write_settings(&app, settings);
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_audio_source_setting(app: AppHandle, source: String) -> Result<(), String> {
+    let parsed = match source.as_str() {
+        "microphone" => AudioSource::Microphone,
+        "system_audio" => AudioSource::SystemAudio,
+        other => {
+            warn!(
+                "Invalid audio source '{}', defaulting to microphone",
+                other
+            );
+            AudioSource::Microphone
+        }
+    };
+
+    let mut settings = settings::get_settings(&app);
+    settings.audio_source = parsed;
+    settings::write_settings(&app, settings);
+
+    // Notify the audio manager to reconfigure
+    let rm = app.state::<std::sync::Arc<crate::managers::audio::AudioRecordingManager>>();
+    rm.update_audio_source(parsed)
+        .map_err(|e| format!("Failed to update audio source: {}", e))
 }

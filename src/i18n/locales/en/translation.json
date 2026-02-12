@@ -72,6 +72,11 @@
         "title": "Accessibility Access",
         "description": "Required to type transcribed text into your applications."
       },
+      "screenRecording": {
+        "title": "Screen & System Audio Recording",
+        "description": "Allows capturing system audio from meetings, videos, and other apps.",
+        "optional": "Optional"
+      },
       "grant": "Grant Permission",
       "granted": "Granted",
       "waiting": "Waiting...",
@@ -210,6 +215,13 @@
       "volume": {
         "title": "Volume",
         "description": "Adjust the volume of audio feedback sounds"
+      },
+      "audioSource": {
+        "title": "Audio Source",
+        "description": "Choose whether to capture microphone or system audio",
+        "microphone": "Microphone Only",
+        "systemAudio": "System Audio Only",
+        "permissionRequired": "Screen Recording permission is required."
       }
     },
     "advanced": {
@@ -431,8 +443,12 @@
         "description": "Enable AI-powered text refinement after transcription"
       },
       "muteWhileRecording": {
-        "label": "Mute While Recording",
-        "description": "Mute system audio during recording"
+        "label": "Mute System Audio While Recording",
+        "description": "Mute system audio output during recording"
+      },
+      "muteMicrophoneWhileRecording": {
+        "label": "Mute Microphone While Recording",
+        "description": "Mute microphone input during recording to prevent feedback"
       },
       "appendTrailingSpace": {
         "label": "Append Trailing Space",

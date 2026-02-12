@@ -595,12 +595,18 @@ impl ShortcutAction for TranscribeAction {
 
                     // Final high-quality translation if streaming translation is enabled
                     if settings.streaming_translation_enabled {
-                        if let Some(translated) = streaming_translator::translate_with_mistral(
-                            &settings.mistral_api_key,
-                            "mistral-medium-latest",
-                            &final_text,
-                        )
-                        .await
+                        let is_english =
+                            streaming_translator::is_likely_english(&final_text);
+
+                        if is_english {
+                            info!("Final text detected as English, skipping translation");
+                        } else if let Some(translated) =
+                            streaming_translator::translate_with_mistral(
+                                &settings.mistral_api_key,
+                                "mistral-medium-latest",
+                                &final_text,
+                            )
+                            .await
                         {
                             info!(
                                 "Final translation completed ({} chars -> {} chars)",

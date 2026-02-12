@@ -160,6 +160,37 @@ impl AudioRecorder {
         Ok(())
     }
 
+    /// Open with an external audio source instead of a cpal device.
+    ///
+    /// Used for system audio capture (ScreenCaptureKit) and mixed-mode
+    /// recording where samples arrive from a non-cpal source.
+    pub fn open_with_external_source(
+        &mut self,
+        sample_rx: mpsc::Receiver<Vec<f32>>,
+        sample_rate: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.worker_handle.is_some() {
+            return Ok(()); // already open
+        }
+
+        let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
+        let vad = self.vad.clone();
+        let level_cb = self.level_cb.clone();
+
+        let worker = std::thread::spawn(move || {
+            log::info!(
+                "External audio source opened (sample_rate={}, mono)",
+                sample_rate
+            );
+            run_consumer(sample_rate, vad, sample_rx, cmd_rx, level_cb);
+        });
+
+        self.cmd_tx = Some(cmd_tx);
+        self.worker_handle = Some(worker);
+
+        Ok(())
+    }
+
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(tx) = self.cmd_tx.take() {
             let _ = tx.send(Cmd::Shutdown);

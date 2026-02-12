@@ -6,12 +6,14 @@ import {
   requestAccessibilityPermission,
   checkMicrophonePermission,
   requestMicrophonePermission,
+  checkScreenRecordingPermission,
+  requestScreenRecordingPermission,
 } from "tauri-plugin-macos-permissions-api";
 import { toast } from "sonner";
 import { commands } from "@/bindings";
 import { useSettingsStore } from "@/stores/settingsStore";
 import HandyTextLogo from "../icons/HandyTextLogo";
-import { Keyboard, Mic, Check, Loader2 } from "lucide-react";
+import { Keyboard, Mic, Monitor, Check, Loader2 } from "lucide-react";
 
 interface AccessibilityOnboardingProps {
   onComplete: () => void;
@@ -22,6 +24,7 @@ type PermissionStatus = "checking" | "needed" | "waiting" | "granted";
 interface PermissionsState {
   accessibility: PermissionStatus;
   microphone: PermissionStatus;
+  screenRecording: PermissionStatus;
 }
 
 const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
@@ -38,7 +41,9 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
   const [permissions, setPermissions] = useState<PermissionsState>({
     accessibility: "checking",
     microphone: "checking",
+    screenRecording: "checking",
   });
+  const [showScreenRecording, setShowScreenRecording] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorCountRef = useRef<number>(0);
@@ -63,10 +68,12 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
     // On macOS, check both permissions
     const checkInitial = async () => {
       try {
-        const [accessibilityGranted, microphoneGranted] = await Promise.all([
-          checkAccessibilityPermission(),
-          checkMicrophonePermission(),
-        ]);
+        const [accessibilityGranted, microphoneGranted, systemAudioAvailable] =
+          await Promise.all([
+            checkAccessibilityPermission(),
+            checkMicrophonePermission(),
+            commands.isSystemAudioAvailable().catch(() => false),
+          ]);
 
         // If accessibility is granted, initialize Enigo and shortcuts
         if (accessibilityGranted) {
@@ -80,9 +87,21 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           }
         }
 
+        // Check screen recording if system audio capture is available
+        let screenRecordingGranted = false;
+        if (systemAudioAvailable) {
+          setShowScreenRecording(true);
+          screenRecordingGranted = await checkScreenRecordingPermission();
+        }
+
         const newState: PermissionsState = {
           accessibility: accessibilityGranted ? "granted" : "needed",
           microphone: microphoneGranted ? "granted" : "needed",
+          screenRecording: systemAudioAvailable
+            ? screenRecordingGranted
+              ? "granted"
+              : "needed"
+            : "checking",
         };
 
         setPermissions(newState);
@@ -98,6 +117,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         setPermissions({
           accessibility: "needed",
           microphone: "needed",
+          screenRecording: "needed",
         });
       }
     };
@@ -111,10 +131,15 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
     pollingRef.current = setInterval(async () => {
       try {
-        const [accessibilityGranted, microphoneGranted] = await Promise.all([
-          checkAccessibilityPermission(),
-          checkMicrophonePermission(),
-        ]);
+        const checks: [Promise<boolean>, Promise<boolean>, Promise<boolean>?] =
+          [checkAccessibilityPermission(), checkMicrophonePermission()];
+
+        if (showScreenRecording) {
+          checks.push(checkScreenRecordingPermission());
+        }
+
+        const [accessibilityGranted, microphoneGranted, screenRecordingGranted] =
+          await Promise.all(checks);
 
         setPermissions((prev) => {
           const newState = { ...prev };
@@ -132,6 +157,14 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
           if (microphoneGranted && prev.microphone !== "granted") {
             newState.microphone = "granted";
+          }
+
+          if (
+            showScreenRecording &&
+            screenRecordingGranted &&
+            prev.screenRecording !== "granted"
+          ) {
+            newState.screenRecording = "granted";
           }
 
           return newState;
@@ -164,7 +197,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         }
       }
     }, 1000);
-  }, [onComplete, refreshAudioDevices, refreshOutputDevices, t]);
+  }, [onComplete, refreshAudioDevices, refreshOutputDevices, showScreenRecording, t]);
 
   // Cleanup polling and timeouts on unmount
   useEffect(() => {
@@ -196,6 +229,20 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       startPolling();
     } catch (error) {
       console.error("Failed to request microphone permission:", error);
+      toast.error(t("onboarding.permissions.errors.requestFailed"));
+    }
+  };
+
+  const handleGrantScreenRecording = async () => {
+    try {
+      // Register app in Screen Recording list via ScreenCaptureKit,
+      // then open System Settings for the user to toggle it on
+      await commands.registerScreenRecording();
+      await requestScreenRecordingPermission();
+      setPermissions((prev) => ({ ...prev, screenRecording: "waiting" }));
+      startPolling();
+    } catch (error) {
+      console.error("Failed to request screen recording permission:", error);
       toast.error(t("onboarding.permissions.errors.requestFailed"));
     }
   };
@@ -313,6 +360,48 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Screen Recording Permission Card (Optional) */}
+        {showScreenRecording && (
+          <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-full bg-logo-primary/20 shrink-0">
+                <Monitor className="w-6 h-6 text-logo-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="font-medium text-text">
+                    {t("onboarding.permissions.screenRecording.title")}
+                  </h3>
+                  <span className="px-1.5 py-0.5 text-xs rounded bg-text/10 text-text/50">
+                    {t("onboarding.permissions.screenRecording.optional")}
+                  </span>
+                </div>
+                <p className="text-sm text-text/60 mb-3">
+                  {t("onboarding.permissions.screenRecording.description")}
+                </p>
+                {permissions.screenRecording === "granted" ? (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                    <Check className="w-4 h-4" />
+                    {t("onboarding.permissions.granted")}
+                  </div>
+                ) : permissions.screenRecording === "waiting" ? (
+                  <div className="flex items-center gap-2 text-text/50 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {t("onboarding.permissions.waiting")}
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleGrantScreenRecording}
+                    className="px-4 py-2 rounded-lg bg-logo-primary hover:bg-logo-primary/90 text-white text-sm font-medium transition-colors"
+                  >
+                    {t("onboarding.permissions.grant")}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
