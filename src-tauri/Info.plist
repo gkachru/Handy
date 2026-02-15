@@ -2,7 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.pais.handy</string>
+  <key>CFBundleName</key>
+  <string>Handy</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>Request microphone access to transcribe audio locally</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Handy captures system audio to transcribe meetings, videos, and other audio playing on your Mac.</string>
 </dict>
 </plist>

@@ -1098,11 +1098,9 @@ pub fn change_audio_source_setting(app: AppHandle, source: String) -> Result<(),
     let parsed = match source.as_str() {
         "microphone" => AudioSource::Microphone,
         "system_audio" => AudioSource::SystemAudio,
+        "mixed" => AudioSource::Mixed,
         other => {
-            warn!(
-                "Invalid audio source '{}', defaulting to microphone",
-                other
-            );
+            warn!("Invalid audio source '{}', defaulting to microphone", other);
             AudioSource::Microphone
         }
     };

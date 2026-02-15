@@ -4,6 +4,20 @@ fn main() {
 
     generate_tray_translations();
 
+    // Embed Info.plist into the binary via -sectcreate so macOS TCC can read
+    // NSAudioCaptureUsageDescription from bare dev binaries (no .app bundle).
+    // In production builds the app bundle's Info.plist takes precedence.
+    #[cfg(target_os = "macos")]
+    {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let info_plist = format!("{}/Info.plist", manifest_dir);
+        println!("cargo:rerun-if-changed=Info.plist");
+        println!("cargo:rustc-link-arg=-sectcreate");
+        println!("cargo:rustc-link-arg=__TEXT");
+        println!("cargo:rustc-link-arg=__info_plist");
+        println!("cargo:rustc-link-arg={}", info_plist);
+    }
+
     tauri_build::build()
 }
 

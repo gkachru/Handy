@@ -72,10 +72,9 @@
         "title": "Accessibility Access",
         "description": "Required to type transcribed text into your applications."
       },
-      "screenRecording": {
-        "title": "Screen & System Audio Recording",
-        "description": "Allows capturing system audio from meetings, videos, and other apps.",
-        "optional": "Optional"
+      "systemAudio": {
+        "title": "System Audio Recording",
+        "description": "Optional. Allows transcribing audio from meetings, videos, and more."
       },
       "grant": "Grant Permission",
       "granted": "Granted",
@@ -221,7 +220,10 @@
         "description": "Choose whether to capture microphone or system audio",
         "microphone": "Microphone Only",
         "systemAudio": "System Audio Only",
-        "permissionRequired": "Screen Recording permission is required."
+        "mixed": "Mic + System Audio",
+        "permissionRequired": "System Audio Recording permission is required.",
+        "openSettings": "Open System Settings",
+        "permissionWaiting": "Waiting for permission..."
       }
     },
     "advanced": {

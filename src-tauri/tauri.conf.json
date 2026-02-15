@@ -16,9 +16,9 @@
         "label": "main",
         "title": "Handy",
         "width": 680,
-        "height": 570,
+        "height": 680,
         "minWidth": 680,
-        "minHeight": 570,
+        "minHeight": 680,
         "resizable": true,
         "maximizable": false,
         "visible": false

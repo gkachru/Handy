@@ -1,6 +1,6 @@
 use crate::audio_toolkit::{list_input_devices, vad::SmoothedVad, AudioRecorder, SileroVad};
 use crate::helpers::clamshell;
-use crate::settings::{get_settings, AudioSource, AppSettings};
+use crate::settings::{get_settings, AppSettings, AudioSource};
 use crate::utils;
 use log::{debug, error, info, warn};
 use std::sync::{mpsc, Arc, Mutex};
@@ -249,6 +249,14 @@ impl AudioRecordingManager {
         }
     }
 
+    /// Ensures system audio output is unmuted. Used in dual-stream mode where
+    /// we need system audio to be audible for the process tap to capture it.
+    pub fn ensure_unmuted(&self) {
+        set_mute(false);
+        *self.did_mute.lock().unwrap() = false;
+        debug!("System audio explicitly unmuted for dual-stream mode");
+    }
+
     /// Removes mute if it was applied
     pub fn remove_mute(&self) {
         let mut did_mute_guard = self.did_mute.lock().unwrap();
@@ -262,7 +270,7 @@ impl AudioRecordingManager {
     pub fn start_microphone_stream(&self) -> Result<(), anyhow::Error> {
         let audio_source = *self.audio_source.lock().unwrap();
         match audio_source {
-            AudioSource::Microphone => self.start_microphone_stream_inner(),
+            AudioSource::Microphone | AudioSource::Mixed => self.start_microphone_stream_inner(),
             AudioSource::SystemAudio => self.start_system_audio_stream(),
         }
     }
@@ -314,15 +322,15 @@ impl AudioRecordingManager {
         Ok(())
     }
 
-    /// Start system audio capture via ScreenCaptureKit (macOS only).
-    /// On non-macOS, falls back to microphone.
+    /// Start system audio capture via CoreAudio process tap (macOS 14.2+ only).
+    /// On non-macOS or older macOS, falls back to microphone.
     fn start_system_audio_stream(&self) -> Result<(), anyhow::Error> {
         #[cfg(target_os = "macos")]
         {
             use crate::audio_toolkit::system_audio;
 
             if !system_audio::is_available() {
-                warn!("System audio capture not available (macOS 13+ required), falling back to microphone");
+                warn!("System audio capture not available (macOS 14.2+ required), falling back to microphone");
                 return self.start_microphone_stream_inner();
             }
 
@@ -337,8 +345,8 @@ impl AudioRecordingManager {
             set_mute(false);
             *self.did_mute.lock().unwrap() = false;
 
-            // Start ScreenCaptureKit system audio (lock released before opening recorder)
-            let sample_rx = {
+            // Start CoreAudio process tap (lock released before opening recorder)
+            let (sample_rx, sample_rate) = {
                 let mut sys_capture = self.system_capture.lock().unwrap();
                 if sys_capture.is_none() {
                     *sys_capture = Some(SystemAudioCapture::new());
@@ -370,9 +378,10 @@ impl AudioRecordingManager {
                 }
 
                 if let Some(rec) = recorder_opt.as_mut() {
-                    rec.open_with_external_source(sample_rx, 48000).map_err(|e| {
-                        anyhow::anyhow!("Failed to open recorder with system audio: {}", e)
-                    })?;
+                    rec.open_with_external_source(sample_rx, sample_rate)
+                        .map_err(|e| {
+                            anyhow::anyhow!("Failed to open recorder with system audio: {}", e)
+                        })?;
                 }
             }
 
@@ -589,19 +598,18 @@ impl AudioRecordingManager {
                 *state = RecordingState::Idle;
                 drop(state);
 
-                let current_samples =
-                    if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
-                        match rec.stop() {
-                            Ok(buf) => buf,
-                            Err(e) => {
-                                error!("stop() failed: {e}");
-                                Vec::new()
-                            }
+                let current_samples = if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
+                    match rec.stop() {
+                        Ok(buf) => buf,
+                        Err(e) => {
+                            error!("stop() failed: {e}");
+                            Vec::new()
                         }
-                    } else {
-                        error!("Recorder not available");
-                        Vec::new()
-                    };
+                    }
+                } else {
+                    error!("Recorder not available");
+                    Vec::new()
+                };
 
                 // Prepend any samples buffered from mid-recording source/device switches
                 let mut buffered = std::mem::take(&mut *self.buffered_samples.lock().unwrap());

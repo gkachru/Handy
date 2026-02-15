@@ -2,13 +2,14 @@
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::managers::audio::AudioRecordingManager;
+use crate::managers::dual_stream::DualStreamCoordinator;
 use crate::managers::history::HistoryManager;
 use crate::managers::incremental_transcription::IncrementalTranscriptionSession;
 use crate::managers::mistral_realtime::MistralRealtimeSession;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::streaming_translator::{self, StreamingTranslator};
 use crate::managers::transcription::TranscriptionManager;
-use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
+use crate::settings::{get_settings, AudioSource, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{
@@ -33,6 +34,22 @@ pub struct StreamingTranslatorState(pub Mutex<Option<StreamingTranslator>>);
 
 /// Managed state for an active incremental (VAD-segmented) transcription session
 pub struct IncrementalSessionState(pub Mutex<Option<IncrementalTranscriptionSession>>);
+
+/// Managed state for dual-stream mode (mic + system audio).
+/// Holds the second Mistral session (system audio), the coordinator, and the system audio capture.
+#[cfg(target_os = "macos")]
+pub struct DualStreamState(
+    pub Mutex<
+        Option<(
+            MistralRealtimeSession,
+            DualStreamCoordinator,
+            crate::audio_toolkit::system_audio::SystemAudioCapture,
+        )>,
+    >,
+);
+
+#[cfg(not(target_os = "macos"))]
+pub struct DualStreamState(pub Mutex<Option<()>>);
 
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
@@ -256,6 +273,8 @@ impl ShortcutAction for TranscribeAction {
             false
         };
 
+        let is_dual_stream = is_mistral_api && settings.audio_source == AudioSource::Mixed;
+
         if is_mistral_api {
             change_tray_icon(app, TrayIconState::Recording);
             show_streaming_overlay(app);
@@ -314,8 +333,115 @@ impl ShortcutAction for TranscribeAction {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
 
-            if is_mistral_api {
-                // Mistral API streaming mode
+            if is_dual_stream {
+                // Dual-stream mode: mic + system audio via two parallel Mistral sessions
+                #[cfg(target_os = "macos")]
+                {
+                    // Ensure system audio output is unmuted — we need to capture it
+                    rm.ensure_unmuted();
+
+                    if let Some(mic_rx) = rm.enable_audio_streaming() {
+                        // Start system audio capture
+                        let mut sys_capture =
+                            crate::audio_toolkit::system_audio::SystemAudioCapture::new();
+                        match sys_capture.start() {
+                            Ok((sys_rx_raw, sample_rate)) => {
+                                // Create resampler bridge: 48kHz (or native) -> 16kHz
+                                let (sys_tx_16k, sys_rx_16k) = std::sync::mpsc::channel();
+                                std::thread::spawn(move || {
+                                    use crate::audio_toolkit::audio::FrameResampler;
+                                    let mut resampler = FrameResampler::new(
+                                        sample_rate as usize,
+                                        16000,
+                                        std::time::Duration::from_millis(30),
+                                    );
+                                    while let Ok(samples) = sys_rx_raw.recv() {
+                                        resampler.push(&samples, |frame| {
+                                            let _ = sys_tx_16k.send(frame.to_vec());
+                                        });
+                                    }
+                                    // Flush remaining
+                                    resampler.finish(|frame| {
+                                        let _ = sys_tx_16k.send(frame.to_vec());
+                                    });
+                                });
+
+                                // Create two silent Mistral sessions
+                                let mic_session = MistralRealtimeSession::start_silent(
+                                    app.clone(),
+                                    settings.mistral_api_key.clone(),
+                                    mic_rx,
+                                );
+                                let sys_session = MistralRealtimeSession::start_silent(
+                                    app.clone(),
+                                    settings.mistral_api_key.clone(),
+                                    sys_rx_16k,
+                                );
+
+                                // Create coordinator
+                                let coordinator = DualStreamCoordinator::start(
+                                    app.clone(),
+                                    mic_session.get_text_ref(),
+                                    sys_session.get_text_ref(),
+                                );
+
+                                // Start streaming translator on coordinator's merged text
+                                if settings.streaming_translation_enabled {
+                                    let text_ref = coordinator.get_text_ref();
+                                    let translator = StreamingTranslator::start(
+                                        app.clone(),
+                                        settings.mistral_api_key.clone(),
+                                        text_ref,
+                                    );
+                                    let translator_state = app.state::<StreamingTranslatorState>();
+                                    *translator_state.0.lock().unwrap() = Some(translator);
+                                    info!("Streaming translator started (dual-stream)");
+                                }
+
+                                // Store mic session in MistralSessionState (reuse existing state)
+                                let session_state = app.state::<MistralSessionState>();
+                                *session_state.0.lock().unwrap() = Some(mic_session);
+
+                                // Store system session + coordinator + capture in DualStreamState
+                                let dual_state = app.state::<DualStreamState>();
+                                *dual_state.0.lock().unwrap() =
+                                    Some((sys_session, coordinator, sys_capture));
+
+                                info!("Dual-stream mode started (mic + system audio)");
+                            }
+                            Err(e) => {
+                                error!("Failed to start system audio capture: {}", e);
+                                // Fall back to mic-only Mistral session
+                                let session = MistralRealtimeSession::start(
+                                    app.clone(),
+                                    settings.mistral_api_key.clone(),
+                                    mic_rx,
+                                );
+                                if settings.streaming_translation_enabled {
+                                    let text_ref = session.get_text_ref();
+                                    let translator = StreamingTranslator::start(
+                                        app.clone(),
+                                        settings.mistral_api_key.clone(),
+                                        text_ref,
+                                    );
+                                    let translator_state = app.state::<StreamingTranslatorState>();
+                                    *translator_state.0.lock().unwrap() = Some(translator);
+                                }
+                                let session_state = app.state::<MistralSessionState>();
+                                *session_state.0.lock().unwrap() = Some(session);
+                                warn!("Fell back to mic-only Mistral session");
+                            }
+                        }
+                    } else {
+                        error!("Failed to enable audio streaming for dual-stream mode");
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    error!("Dual-stream mode is only supported on macOS");
+                }
+            } else if is_mistral_api {
+                // Mistral API streaming mode (single stream)
                 if let Some(audio_rx) = rm.enable_audio_streaming() {
                     let session = MistralRealtimeSession::start(
                         app.clone(),
@@ -563,146 +689,320 @@ impl ShortcutAction for TranscribeAction {
                     change_tray_icon(&ah, TrayIconState::Idle);
                 }
             } else if is_mistral_api {
-                // Mistral streaming mode: stop session, get final text
-                rm.disable_audio_streaming();
-
-                // Stop the periodic translator
-                {
-                    let ts = ah.state::<StreamingTranslatorState>();
-                    let mut guard = ts.0.lock().unwrap();
-                    if let Some(mut translator) = guard.take() {
-                        translator.stop();
-                    }
-                }
-
-                let session = {
-                    let session_state = ah.state::<MistralSessionState>();
-                    let session = session_state.0.lock().unwrap().take();
-                    session
-                };
-                let final_text = if let Some(mut session) = session {
-                    session.stop().await
-                } else {
-                    String::new()
+                // Check for dual-stream state first
+                let dual_state_data = {
+                    let ds = ah.state::<DualStreamState>();
+                    let data = ds.0.lock().unwrap().take();
+                    data
                 };
 
-                // Stop recording and get samples (for history)
-                let samples = rm.stop_recording(&binding_id).unwrap_or_default();
+                #[cfg(target_os = "macos")]
+                let is_dual = dual_state_data.is_some();
+                #[cfg(not(target_os = "macos"))]
+                let is_dual = false;
 
-                if !final_text.is_empty() {
-                    let settings = get_settings(&ah);
-                    let mut text = final_text.clone();
+                if is_dual {
+                    // Dual-stream stop flow
+                    #[cfg(target_os = "macos")]
+                    {
+                        rm.disable_audio_streaming();
 
-                    // Final high-quality translation if streaming translation is enabled
-                    if settings.streaming_translation_enabled {
-                        let is_english =
-                            streaming_translator::is_likely_english(&final_text);
-
-                        if is_english {
-                            info!("Final text detected as English, skipping translation");
-                        } else if let Some(translated) =
-                            streaming_translator::translate_with_mistral(
-                                &settings.mistral_api_key,
-                                "mistral-medium-latest",
-                                &final_text,
-                            )
-                            .await
+                        // Stop the periodic translator
                         {
-                            info!(
-                                "Final translation completed ({} chars -> {} chars)",
-                                final_text.len(),
-                                translated.len()
-                            );
-                            text = translated;
+                            let ts = ah.state::<StreamingTranslatorState>();
+                            let mut guard = ts.0.lock().unwrap();
+                            if let Some(mut translator) = guard.take() {
+                                translator.stop();
+                            }
+                        }
+
+                        let (mut sys_session, mut coordinator, mut sys_capture) =
+                            dual_state_data.unwrap();
+
+                        // Stop system audio capture
+                        sys_capture.stop();
+
+                        // Stop coordinator and get segments
+                        let segments = coordinator.stop();
+
+                        // Stop both Mistral sessions
+                        let mic_session = {
+                            let session_state = ah.state::<MistralSessionState>();
+                            let s = session_state.0.lock().unwrap().take();
+                            s
+                        };
+                        let mic_final = if let Some(mut session) = mic_session {
+                            session.stop().await
                         } else {
-                            warn!("Final translation failed, using original text");
-                        }
-                    }
+                            String::new()
+                        };
+                        let sys_final = sys_session.stop().await;
 
-                    // Apply Chinese variant conversion (only if not translated)
-                    if !settings.streaming_translation_enabled {
-                        if let Some(converted) =
-                            maybe_convert_chinese_variant(&settings, &text).await
-                        {
-                            text = converted;
-                        }
-                    }
+                        // Stop recording and get samples (for history)
+                        let samples = rm.stop_recording(&binding_id).unwrap_or_default();
 
-                    // Apply LLM post-processing if applicable
-                    let mut post_processed_text: Option<String> = None;
-                    let mut post_process_prompt_text: Option<String> = None;
+                        // Build chronological merged final text
+                        let merged_text = DualStreamCoordinator::build_final_text(
+                            &segments, &mic_final, &sys_final,
+                        );
 
-                    if post_process {
-                        show_processing_overlay(&ah);
-                        if let Some(processed) = post_process_transcription(&settings, &text).await
-                        {
-                            post_processed_text = Some(processed.clone());
-                            text = processed;
+                        if !merged_text.is_empty() {
+                            let settings = get_settings(&ah);
+                            let mut text = merged_text.clone();
 
-                            if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
-                                if let Some(prompt) = settings
-                                    .post_process_prompts
-                                    .iter()
-                                    .find(|p| &p.id == prompt_id)
+                            // Final high-quality translation if streaming translation is enabled
+                            if settings.streaming_translation_enabled {
+                                let is_english =
+                                    streaming_translator::is_likely_english(&merged_text);
+
+                                if is_english {
+                                    info!("Final text detected as English, skipping translation");
+                                } else if let Some(translated) =
+                                    streaming_translator::translate_with_mistral(
+                                        &settings.mistral_api_key,
+                                        "mistral-medium-latest",
+                                        &merged_text,
+                                    )
+                                    .await
                                 {
-                                    post_process_prompt_text = Some(prompt.prompt.clone());
+                                    info!(
+                                        "Final dual-stream translation completed ({} -> {} chars)",
+                                        merged_text.len(),
+                                        translated.len()
+                                    );
+                                    text = translated;
+                                } else {
+                                    warn!("Final translation failed, using original text");
+                                }
+                            }
+
+                            // Apply LLM post-processing if applicable
+                            let mut post_processed_text: Option<String> = None;
+                            let mut post_process_prompt_text: Option<String> = None;
+
+                            if post_process {
+                                show_processing_overlay(&ah);
+                                if let Some(processed) =
+                                    post_process_transcription(&settings, &text).await
+                                {
+                                    post_processed_text = Some(processed.clone());
+                                    text = processed;
+
+                                    if let Some(prompt_id) =
+                                        &settings.post_process_selected_prompt_id
+                                    {
+                                        if let Some(prompt) = settings
+                                            .post_process_prompts
+                                            .iter()
+                                            .find(|p| &p.id == prompt_id)
+                                        {
+                                            post_process_prompt_text =
+                                                Some(prompt.prompt.clone());
+                                        }
+                                    }
+                                }
+                            }
+
+                            if post_processed_text.is_none() && text != merged_text {
+                                post_processed_text = Some(text.clone());
+                            }
+
+                            // Save to history
+                            let hm_clone = Arc::clone(&hm);
+                            let transcription_for_history =
+                                if settings.streaming_translation_enabled && text != merged_text {
+                                    format!("{}\n\n---\n\n{}", merged_text, text)
+                                } else {
+                                    merged_text.clone()
+                                };
+                            let pp_text = post_processed_text.clone();
+                            let pp_prompt = post_process_prompt_text.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = hm_clone
+                                    .save_transcription(
+                                        samples,
+                                        transcription_for_history,
+                                        pp_text,
+                                        pp_prompt,
+                                    )
+                                    .await
+                                {
+                                    error!("Failed to save transcription to history: {}", e);
+                                }
+                            });
+
+                            // Paste the final text
+                            let ah_clone = ah.clone();
+                            let paste_time = Instant::now();
+                            ah.run_on_main_thread(move || {
+                                match utils::paste(text, ah_clone.clone()) {
+                                    Ok(()) => debug!(
+                                        "Text pasted successfully in {:?}",
+                                        paste_time.elapsed()
+                                    ),
+                                    Err(e) => error!("Failed to paste transcription: {}", e),
+                                }
+                                utils::hide_recording_overlay(&ah_clone);
+                                change_tray_icon(&ah_clone, TrayIconState::Idle);
+                            })
+                            .unwrap_or_else(|e| {
+                                error!("Failed to run paste on main thread: {:?}", e);
+                                utils::hide_recording_overlay(&ah);
+                                change_tray_icon(&ah, TrayIconState::Idle);
+                            });
+                        } else {
+                            utils::hide_recording_overlay(&ah);
+                            change_tray_icon(&ah, TrayIconState::Idle);
+                        }
+                    }
+                } else {
+                    // Single-stream Mistral stop flow
+                    rm.disable_audio_streaming();
+
+                    // Stop the periodic translator
+                    {
+                        let ts = ah.state::<StreamingTranslatorState>();
+                        let mut guard = ts.0.lock().unwrap();
+                        if let Some(mut translator) = guard.take() {
+                            translator.stop();
+                        }
+                    }
+
+                    let session = {
+                        let session_state = ah.state::<MistralSessionState>();
+                        let session = session_state.0.lock().unwrap().take();
+                        session
+                    };
+                    let final_text = if let Some(mut session) = session {
+                        session.stop().await
+                    } else {
+                        String::new()
+                    };
+
+                    // Stop recording and get samples (for history)
+                    let samples = rm.stop_recording(&binding_id).unwrap_or_default();
+
+                    if !final_text.is_empty() {
+                        let settings = get_settings(&ah);
+                        let mut text = final_text.clone();
+
+                        // Final high-quality translation if streaming translation is enabled
+                        if settings.streaming_translation_enabled {
+                            let is_english =
+                                streaming_translator::is_likely_english(&final_text);
+
+                            if is_english {
+                                info!("Final text detected as English, skipping translation");
+                            } else if let Some(translated) =
+                                streaming_translator::translate_with_mistral(
+                                    &settings.mistral_api_key,
+                                    "mistral-medium-latest",
+                                    &final_text,
+                                )
+                                .await
+                            {
+                                info!(
+                                    "Final translation completed ({} chars -> {} chars)",
+                                    final_text.len(),
+                                    translated.len()
+                                );
+                                text = translated;
+                            } else {
+                                warn!("Final translation failed, using original text");
+                            }
+                        }
+
+                        // Apply Chinese variant conversion (only if not translated)
+                        if !settings.streaming_translation_enabled {
+                            if let Some(converted) =
+                                maybe_convert_chinese_variant(&settings, &text).await
+                            {
+                                text = converted;
+                            }
+                        }
+
+                        // Apply LLM post-processing if applicable
+                        let mut post_processed_text: Option<String> = None;
+                        let mut post_process_prompt_text: Option<String> = None;
+
+                        if post_process {
+                            show_processing_overlay(&ah);
+                            if let Some(processed) =
+                                post_process_transcription(&settings, &text).await
+                            {
+                                post_processed_text = Some(processed.clone());
+                                text = processed;
+
+                                if let Some(prompt_id) =
+                                    &settings.post_process_selected_prompt_id
+                                {
+                                    if let Some(prompt) = settings
+                                        .post_process_prompts
+                                        .iter()
+                                        .find(|p| &p.id == prompt_id)
+                                    {
+                                        post_process_prompt_text = Some(prompt.prompt.clone());
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Always store the final text as post-processed if it differs
-                    // from the original (e.g. translation was applied)
-                    if post_processed_text.is_none() && text != final_text {
-                        post_processed_text = Some(text.clone());
-                    }
-
-                    // Save to history — concatenate original + translation
-                    let hm_clone = Arc::clone(&hm);
-                    let transcription_for_history =
-                        if settings.streaming_translation_enabled && text != final_text {
-                            format!("{}\n\n---\n\n{}", final_text, text)
-                        } else {
-                            final_text.clone()
-                        };
-                    let pp_text = post_processed_text.clone();
-                    let pp_prompt = post_process_prompt_text.clone();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(e) = hm_clone
-                            .save_transcription(
-                                samples,
-                                transcription_for_history,
-                                pp_text,
-                                pp_prompt,
-                            )
-                            .await
-                        {
-                            error!("Failed to save transcription to history: {}", e);
+                        // Always store the final text as post-processed if it differs
+                        // from the original (e.g. translation was applied)
+                        if post_processed_text.is_none() && text != final_text {
+                            post_processed_text = Some(text.clone());
                         }
-                    });
 
-                    // Paste the final text
-                    let ah_clone = ah.clone();
-                    let paste_time = Instant::now();
-                    ah.run_on_main_thread(move || {
-                        match utils::paste(text, ah_clone.clone()) {
-                            Ok(()) => {
-                                debug!("Text pasted successfully in {:?}", paste_time.elapsed())
+                        // Save to history — concatenate original + translation
+                        let hm_clone = Arc::clone(&hm);
+                        let transcription_for_history =
+                            if settings.streaming_translation_enabled && text != final_text {
+                                format!("{}\n\n---\n\n{}", final_text, text)
+                            } else {
+                                final_text.clone()
+                            };
+                        let pp_text = post_processed_text.clone();
+                        let pp_prompt = post_process_prompt_text.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = hm_clone
+                                .save_transcription(
+                                    samples,
+                                    transcription_for_history,
+                                    pp_text,
+                                    pp_prompt,
+                                )
+                                .await
+                            {
+                                error!("Failed to save transcription to history: {}", e);
                             }
-                            Err(e) => error!("Failed to paste transcription: {}", e),
-                        }
-                        utils::hide_recording_overlay(&ah_clone);
-                        change_tray_icon(&ah_clone, TrayIconState::Idle);
-                    })
-                    .unwrap_or_else(|e| {
-                        error!("Failed to run paste on main thread: {:?}", e);
+                        });
+
+                        // Paste the final text
+                        let ah_clone = ah.clone();
+                        let paste_time = Instant::now();
+                        ah.run_on_main_thread(move || {
+                            match utils::paste(text, ah_clone.clone()) {
+                                Ok(()) => {
+                                    debug!(
+                                        "Text pasted successfully in {:?}",
+                                        paste_time.elapsed()
+                                    )
+                                }
+                                Err(e) => error!("Failed to paste transcription: {}", e),
+                            }
+                            utils::hide_recording_overlay(&ah_clone);
+                            change_tray_icon(&ah_clone, TrayIconState::Idle);
+                        })
+                        .unwrap_or_else(|e| {
+                            error!("Failed to run paste on main thread: {:?}", e);
+                            utils::hide_recording_overlay(&ah);
+                            change_tray_icon(&ah, TrayIconState::Idle);
+                        });
+                    } else {
+                        // Stop recording even if no text
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
-                    });
-                } else {
-                    // Stop recording even if no text
-                    utils::hide_recording_overlay(&ah);
-                    change_tray_icon(&ah, TrayIconState::Idle);
+                    }
                 }
             } else {
                 // Standard batch transcription mode

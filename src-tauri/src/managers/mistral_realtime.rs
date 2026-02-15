@@ -71,6 +71,25 @@ impl MistralRealtimeSession {
         api_key: String,
         audio_rx: mpsc::Receiver<Vec<f32>>,
     ) -> Self {
+        Self::start_inner(app_handle, api_key, audio_rx, true)
+    }
+
+    /// Start a silent session that does NOT emit events to the frontend.
+    /// Used in dual-stream mode where the DualStreamCoordinator handles events.
+    pub fn start_silent(
+        app_handle: AppHandle,
+        api_key: String,
+        audio_rx: mpsc::Receiver<Vec<f32>>,
+    ) -> Self {
+        Self::start_inner(app_handle, api_key, audio_rx, false)
+    }
+
+    fn start_inner(
+        app_handle: AppHandle,
+        api_key: String,
+        audio_rx: mpsc::Receiver<Vec<f32>>,
+        emit_events: bool,
+    ) -> Self {
         let stop_signal = Arc::new(AtomicBool::new(false));
         let done_notify = Arc::new(Notify::new());
         let final_text = Arc::new(Mutex::new(String::new()));
@@ -82,7 +101,8 @@ impl MistralRealtimeSession {
         let audio_rx = Arc::new(Mutex::new(audio_rx));
 
         let handle = tauri::async_runtime::spawn(async move {
-            Self::run_session(app_handle, api_key, audio_rx, stop, done.clone(), text).await;
+            Self::run_session(app_handle, api_key, audio_rx, stop, done.clone(), text, emit_events)
+                .await;
             done.notify_waiters();
         });
 
@@ -122,6 +142,7 @@ impl MistralRealtimeSession {
         stop_signal: Arc<AtomicBool>,
         _done_notify: Arc<Notify>,
         final_text: Arc<Mutex<String>>,
+        emit_events: bool,
     ) {
         // Buffer all audio for reconnection
         let audio_buffer: Arc<Mutex<Vec<Vec<f32>>>> = Arc::new(Mutex::new(Vec::new()));
@@ -133,14 +154,16 @@ impl MistralRealtimeSession {
                 break;
             }
 
-            emit_status(
-                &app,
-                if retry_count == 0 {
-                    "connecting"
-                } else {
-                    "reconnecting"
-                },
-            );
+            if emit_events {
+                emit_status(
+                    &app,
+                    if retry_count == 0 {
+                        "connecting"
+                    } else {
+                        "reconnecting"
+                    },
+                );
+            }
 
             match Self::connect_and_stream(
                 &app,
@@ -149,6 +172,7 @@ impl MistralRealtimeSession {
                 &stop_signal,
                 &final_text,
                 &audio_buffer,
+                emit_events,
             )
             .await
             {
@@ -163,7 +187,9 @@ impl MistralRealtimeSession {
                             "Mistral realtime: max retries ({}) exceeded, giving up: {}",
                             max_retries, e
                         );
-                        emit_status(&app, "error");
+                        if emit_events {
+                            emit_status(&app, "error");
+                        }
                         break;
                     }
                     warn!(
@@ -185,6 +211,7 @@ impl MistralRealtimeSession {
         stop_signal: &Arc<AtomicBool>,
         final_text: &Arc<Mutex<String>>,
         audio_buffer: &Arc<Mutex<Vec<Vec<f32>>>>,
+        emit_events: bool,
     ) -> Result<(), String> {
         use futures_util::{SinkExt, StreamExt};
         use tokio_tungstenite::tungstenite;
@@ -233,7 +260,9 @@ impl MistralRealtimeSession {
             return Err("Connection closed before session.created".to_string());
         }
 
-        emit_status(app, "connected");
+        if emit_events {
+            emit_status(app, "connected");
+        }
 
         // Send 2s of silence warmup
         let silence_samples = vec![0.0f32; 480]; // 30ms at 16kHz
@@ -303,7 +332,9 @@ impl MistralRealtimeSession {
                                         acc.push_str(delta);
                                         let current = acc.clone();
                                         drop(acc);
-                                        emit_text(&app_for_recv, &current);
+                                        if emit_events {
+                                            emit_text(&app_for_recv, &current);
+                                        }
                                     }
                                 }
                                 "transcription.done" => {

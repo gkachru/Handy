@@ -24,19 +24,15 @@ pub fn is_likely_english(text: &str) -> bool {
     }
 
     const ENGLISH_STOP_WORDS: &[&str] = &[
-        "the", "is", "are", "was", "were", "am", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did",
-        "this", "that", "these", "those",
-        "not", "but", "and", "or", "if", "so",
-        "they", "them", "their", "he", "she", "it", "we", "you", "i",
-        "would", "could", "should", "will", "shall", "may", "might", "can",
-        "which", "what", "where", "when", "who", "how",
-        "there", "here", "very", "just", "also", "some", "any",
-        "my", "your", "his", "her", "its", "our",
-        "a", "an", "of", "in", "to", "for", "on", "with", "at", "by", "from",
+        "the", "is", "are", "was", "were", "am", "be", "been", "being", "have", "has", "had", "do",
+        "does", "did", "this", "that", "these", "those", "not", "but", "and", "or", "if", "so",
+        "they", "them", "their", "he", "she", "it", "we", "you", "i", "would", "could", "should",
+        "will", "shall", "may", "might", "can", "which", "what", "where", "when", "who", "how",
+        "there", "here", "very", "just", "also", "some", "any", "my", "your", "his", "her", "its",
+        "our", "a", "an", "of", "in", "to", "for", "on", "with", "at", "by", "from",
         // Common spoken-English words unlikely in other Latin-script languages
-        "hello", "now", "about", "out", "up", "because", "going", "thing",
-        "know", "want", "think", "getting", "actually", "really",
+        "hello", "now", "about", "out", "up", "because", "going", "thing", "know", "want", "think",
+        "getting", "actually", "really",
     ];
 
     let words: Vec<&str> = text
@@ -155,9 +151,7 @@ impl StreamingTranslator {
             } else {
                 &current_text
             };
-            let has_non_latin = new_text
-                .chars()
-                .any(|c| c.is_alphabetic() && !c.is_ascii());
+            let has_non_latin = new_text.chars().any(|c| c.is_alphabetic() && !c.is_ascii());
             let skip_english = if has_non_latin {
                 false
             } else {
@@ -190,10 +184,8 @@ impl StreamingTranslator {
                 }
                 None => {
                     consecutive_failures += 1;
-                    let backoff = std::cmp::min(
-                        100 * (1u64 << (consecutive_failures - 1).min(6)),
-                        5000,
-                    );
+                    let backoff =
+                        std::cmp::min(100 * (1u64 << (consecutive_failures - 1).min(6)), 5000);
                     warn!(
                         "Streaming translation failed ({} consecutive), backing off {}ms",
                         consecutive_failures, backoff
@@ -225,7 +217,9 @@ async fn translate_with_mistral_client(
             {
                 "role": "user",
                 "content": format!(
-                    "Translate the following text to English. Output ONLY the translation, nothing else:\n\n{}",
+                    "Translate the following text to English. \
+                     IMPORTANT: Preserve any markers like [🎤 Mic] or [🔊 System Audio] exactly as they appear — do NOT translate them. \
+                     Output ONLY the translation, nothing else:\n\n{}",
                     text
                 )
             }

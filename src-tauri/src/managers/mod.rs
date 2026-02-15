@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod dual_stream;
 pub mod history;
 pub mod incremental_transcription;
 pub mod mistral_realtime;

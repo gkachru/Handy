@@ -129,6 +129,7 @@ pub enum ModelUnloadTimeout {
 pub enum AudioSource {
     Microphone,
     SystemAudio,
+    Mixed,
 }
 
 impl Default for AudioSource {

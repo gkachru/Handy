@@ -207,10 +207,35 @@ pub fn is_system_audio_available() -> bool {
     crate::audio_toolkit::system_audio::is_available()
 }
 
-/// Trigger ScreenCaptureKit so macOS registers this app in the
-/// Screen Recording permission list in System Settings.
+/// Open macOS System Settings to the Screen & System Audio Recording pane.
+/// This lets the user manually toggle the permission if TCC auto-registration
+/// via `AudioHardwareCreateProcessTap` doesn't add the app to the list.
 #[tauri::command]
 #[specta::specta]
 pub fn register_screen_recording() {
-    crate::audio_toolkit::system_audio::prompt_screen_recording_registration();
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            .spawn();
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn check_system_audio_permission() -> bool {
+    crate::audio_toolkit::system_audio::check_permission()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn request_system_audio_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        tokio::task::spawn_blocking(|| crate::audio_toolkit::system_audio::request_permission())
+            .await
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
 }

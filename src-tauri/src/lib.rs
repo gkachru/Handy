@@ -135,6 +135,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(actions::MistralSessionState(Mutex::new(None)));
     app_handle.manage(actions::StreamingTranslatorState(Mutex::new(None)));
     app_handle.manage(actions::IncrementalSessionState(Mutex::new(None)));
+    app_handle.manage(actions::DualStreamState(Mutex::new(None)));
 
     // Note: Shortcuts are NOT initialized here.
     // The frontend is responsible for calling the `initialize_shortcuts` command
@@ -146,6 +147,19 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Set up SIGUSR2 signal handler for toggling transcription
     #[cfg(unix)]
     signal_handle::setup_signal_handler(app_handle.clone(), signals);
+
+    // Probe system audio permission so macOS auto-registers Handy in
+    // System Settings > Privacy & Security > System Audio Recording.
+    // Fire-and-forget on a background thread to avoid blocking startup.
+    #[cfg(target_os = "macos")]
+    {
+        std::thread::spawn(|| {
+            if audio_toolkit::system_audio::is_available() {
+                let granted = audio_toolkit::system_audio::check_permission();
+                log::info!("System audio permission probe: granted={granted}");
+            }
+        });
+    }
 
     // Apply macOS Accessory policy if starting hidden
     #[cfg(target_os = "macos")]
@@ -349,6 +363,8 @@ pub fn run() {
         commands::audio::is_recording,
         commands::audio::is_system_audio_available,
         commands::audio::register_screen_recording,
+        commands::audio::check_system_audio_permission,
+        commands::audio::request_system_audio_permission,
         commands::transcription::set_model_unload_timeout,
         commands::transcription::get_model_load_status,
         commands::transcription::unload_model_manually,

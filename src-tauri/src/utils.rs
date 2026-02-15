@@ -1,4 +1,6 @@
-use crate::actions::{IncrementalSessionState, MistralSessionState, StreamingTranslatorState};
+use crate::actions::{
+    DualStreamState, IncrementalSessionState, MistralSessionState, StreamingTranslatorState,
+};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::shortcut;
@@ -48,6 +50,22 @@ pub fn cancel_current_operation(app: &AppHandle) {
         if let Some(mut translator) = guard.take() {
             translator.stop();
             info!("Streaming translator cancelled");
+        }
+    }
+
+    // Stop any active dual-stream components (system audio session + coordinator + capture)
+    {
+        let dual_state = app.state::<DualStreamState>();
+        let mut guard = dual_state.0.lock().unwrap();
+        if let Some(dual) = guard.take() {
+            #[cfg(target_os = "macos")]
+            {
+                let (_sys_session, mut coordinator, mut sys_capture) = dual;
+                coordinator.stop();
+                sys_capture.stop();
+                // sys_session is dropped here, which stops it
+            }
+            info!("Dual-stream components cancelled");
         }
     }
 
