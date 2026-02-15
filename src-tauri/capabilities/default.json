@@ -19,6 +19,7 @@
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-unregister-all",
     "macos-permissions:default",
+    "core:window:allow-set-position",
     "fs:read-files",
     "fs:allow-resource-read-recursive",
     {

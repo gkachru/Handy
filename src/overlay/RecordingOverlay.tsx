@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
-import React, { useEffect, useRef, useState } from "react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MicrophoneIcon,
@@ -35,6 +36,67 @@ const RecordingOverlay: React.FC = () => {
   const translationDir = translationText
     ? detectTextDirection(translationText)
     : "ltr";
+  const dragRef = useRef<{
+    startScreenX: number;
+    startScreenY: number;
+    startWinX: number;
+    startWinY: number;
+  } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
+    // Only drag on left-click and not on interactive children
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(".cancel-button, .streaming-text-area, .streaming-original, .streaming-translation, .streaming-resize-handle")) return;
+
+    try {
+      const win = getCurrentWebviewWindow();
+      const pos = await win.outerPosition();
+      const scaleFactor = await win.scaleFactor();
+      dragRef.current = {
+        startScreenX: e.screenX,
+        startScreenY: e.screenY,
+        startWinX: pos.x / scaleFactor,
+        startWinY: pos.y / scaleFactor,
+      };
+      setIsDragging(true);
+    } catch {
+      // Ignore errors getting window position
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = async (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = e.screenX - dragRef.current.startScreenX;
+      const dy = e.screenY - dragRef.current.startScreenY;
+      try {
+        const win = getCurrentWebviewWindow();
+        await win.setPosition({
+          type: "Logical",
+          x: dragRef.current.startWinX + dx,
+          y: dragRef.current.startWinY + dy,
+        });
+      } catch {
+        // Ignore position errors
+      }
+    };
+
+    const handleMouseUp = () => {
+      dragRef.current = null;
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
 
   useEffect(() => {
     const setupEventListeners = async () => {
@@ -131,7 +193,8 @@ const RecordingOverlay: React.FC = () => {
   return (
     <div
       dir={direction}
-      className={`recording-overlay ${isVisible ? "fade-in" : ""} ${isStreaming ? "streaming-mode" : ""}`}
+      onMouseDown={handleMouseDown}
+      className={`recording-overlay ${isVisible ? "fade-in" : ""} ${isStreaming ? "streaming-mode" : ""} ${isDragging ? "dragging" : ""}`}
     >
       {isStreaming ? (
         <div className="streaming-container">
