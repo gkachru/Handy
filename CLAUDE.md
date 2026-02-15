@@ -44,21 +44,37 @@ Handy is a cross-platform desktop speech-to-text app built with Tauri 2.x (Rust 
   - `model.rs` - Model downloading and management
   - `transcription.rs` - Speech-to-text processing pipeline
   - `history.rs` - Transcription history storage
+  - `dual_stream.rs` - Dual-stream transcription (mic + system audio simultaneously)
+  - `incremental_transcription.rs` - Incremental/streaming transcription
+  - `streaming_translator.rs` - Real-time streaming translation
+  - `mistral_realtime.rs` - Mistral realtime processing
 - `audio_toolkit/` - Low-level audio processing:
   - `audio/` - Device enumeration, recording, resampling
   - `vad/` - Voice Activity Detection (Silero VAD)
+  - `system_audio.rs` - System audio capture
 - `commands/` - Tauri command handlers for frontend communication
-- `shortcut.rs` - Global keyboard shortcut handling
+- `shortcut/` - Global keyboard shortcut handling (module)
 - `settings.rs` - Application settings management
+- `overlay.rs` - Recording overlay window management
+- `clipboard.rs` - Clipboard operations
+- `input.rs` - Input simulation (text pasting)
+- `llm_client.rs` - LLM API client
+- `apple_intelligence.rs` - Apple Intelligence integration
+- `tray.rs`, `tray_i18n.rs` - System tray menu and its i18n
+- `audio_feedback.rs` - Audio feedback sounds
 
 ### Frontend Structure (src/)
 
 - `App.tsx` - Main component with onboarding flow
-- `components/settings/` - Settings UI (35+ files)
+- `components/settings/` - Settings UI (43 files)
 - `components/model-selector/` - Model management interface
 - `components/onboarding/` - First-run experience
-- `hooks/useSettings.ts`, `useModels.ts` - State management hooks
-- `stores/settingsStore.ts` - Zustand store for settings
+- `components/ui/` - Reusable UI primitives
+- `components/shared/` - Shared components
+- `components/footer/` - Footer UI
+- `components/update-checker/` - App update checker
+- `hooks/useSettings.ts`, `useOsType.ts` - Custom hooks
+- `stores/settingsStore.ts`, `modelStore.ts` - Zustand stores
 - `bindings.ts` - Auto-generated Tauri type bindings (via tauri-specta)
 - `overlay/` - Recording overlay window code
 
@@ -87,11 +103,8 @@ All user-facing strings must use i18next translations. ESLint enforces this (no 
 src/i18n/
 ├── index.ts           # i18n setup
 ├── languages.ts       # Language metadata
-└── locales/
-    ├── en/translation.json  # English (source)
-    ├── es/translation.json  # Spanish
-    ├── fr/translation.json  # French
-    └── vi/translation.json  # Vietnamese
+└── locales/           # 16 languages: ar, cs, de, en, es, fr, it, ja, ko, pl, pt, ru, tr, uk, vi, zh
+    └── {lang}/translation.json
 ```
 
 ## Code Style
