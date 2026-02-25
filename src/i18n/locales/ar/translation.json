@@ -55,6 +55,26 @@
       "moonshine-base": {
         "name": "Moonshine Base",
         "description": ".سريع جداً، الإنجليزية فقط. يتعامل جيداً مع اللهجات"
+      },
+      "moonshine-tiny-streaming-en": {
+        "name": "Moonshine V2 Tiny",
+        "description": "سريع للغاية، الإنجليزية فقط"
+      },
+      "moonshine-small-streaming-en": {
+        "name": "Moonshine V2 Small",
+        "description": "سريع، الإنجليزية فقط. توازن جيد بين السرعة والدقة."
+      },
+      "moonshine-medium-streaming-en": {
+        "name": "Moonshine V2 Medium",
+        "description": "الإنجليزية فقط. جودة عالية."
+      },
+      "breeze-asr": {
+        "name": "Breeze ASR",
+        "description": "محسّن للماندرين التايوانية. دعم التبديل بين اللغات."
+      },
+      "sense-voice-int8": {
+        "name": "SenseVoice",
+        "description": "سريع جداً. الصينية، الإنجليزية، اليابانية، الكورية، الكانتونية."
       }
     },
     "errors": {
@@ -219,8 +239,10 @@
           "clipboardCtrlShiftV": "الحافظة (Ctrl+Shift+V)",
           "clipboardShiftInsert": "الحافظة (Shift+Insert)",
           "direct": "مباشر",
-          "none": "بلا"
-        }
+          "none": "بلا",
+          "externalScript": "نص برمجي خارجي"
+        },
+        "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {
         "title": "أداة الكتابة",
@@ -272,7 +294,8 @@
         "description": ".أضف الكلمات التي غالباً ما يتم فهمها بشكل خاطئ أو كتابتها بشكل خاطئ أثناء التفريغ. سيقوم النظام تلقائياً بتصحيح الكلمات ذات الصوت المماثل لتطابق قائمتك",
         "placeholder": "أضف كلمة",
         "add": "إضافة",
-        "remove": "إزالة {{word}}"
+        "remove": "إزالة {{word}}",
+        "duplicate": "\"{{word}}\" موجود بالفعل"
       }
     },
     "postProcessing": {

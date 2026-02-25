@@ -17,7 +17,7 @@
       ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       # Read version from Cargo.toml
-      cargoToml = builtins.fromTOML (builtins.readFile ./src-tauri/Cargo.toml);
+      cargoToml = fromTOML (builtins.readFile ./src-tauri/Cargo.toml);
       version = cargoToml.package.version;
     in
     {

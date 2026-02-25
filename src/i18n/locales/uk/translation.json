@@ -54,7 +54,27 @@
       },
       "moonshine-base": {
         "name": "Moonshine Base",
-        "description": "Very fast, English only. Handles accents well."
+        "description": "Дуже швидкий, лише англійська. Добре справляється з акцентами."
+      },
+      "moonshine-tiny-streaming-en": {
+        "name": "Moonshine V2 Tiny",
+        "description": "Надшвидкий, лише англійська"
+      },
+      "moonshine-small-streaming-en": {
+        "name": "Moonshine V2 Small",
+        "description": "Швидкий, лише англійська. Добрий баланс швидкості та точності."
+      },
+      "moonshine-medium-streaming-en": {
+        "name": "Moonshine V2 Medium",
+        "description": "Лише англійська. Висока якість."
+      },
+      "breeze-asr": {
+        "name": "Breeze ASR",
+        "description": "Оптимізовано для тайванської мандаринської. Підтримка перемикання мов."
+      },
+      "sense-voice-int8": {
+        "name": "SenseVoice",
+        "description": "Дуже швидкий. Китайська, англійська, японська, корейська, кантонська."
       }
     },
     "errors": {
@@ -241,8 +261,10 @@
           "clipboardCtrlShiftV": "Буфер обміну (Ctrl+Shift+V)",
           "clipboardShiftInsert": "Буфер обміну (Shift+Insert)",
           "direct": "Прямий",
-          "none": "Немає"
-        }
+          "none": "Немає",
+          "externalScript": "Зовнішній скрипт"
+        },
+        "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {
         "title": "Інструмент введення",
@@ -294,7 +316,8 @@
         "description": "Додайте слова, які часто неправильно розпізнаються під час транскрипції. Система автоматично виправлятиме схожі за звучанням слова відповідно до вашого списку.",
         "placeholder": "Додати слово",
         "add": "Додати",
-        "remove": "Видалити {{word}}"
+        "remove": "Видалити {{word}}",
+        "duplicate": "\"{{word}}\" вже існує"
       }
     },
     "postProcessing": {

@@ -55,6 +55,26 @@
       "moonshine-base": {
         "name": "Moonshine Base",
         "description": "매우 빠름, 영어 전용. 억양을 잘 처리합니다."
+      },
+      "moonshine-tiny-streaming-en": {
+        "name": "Moonshine V2 Tiny",
+        "description": "초고속, 영어 전용"
+      },
+      "moonshine-small-streaming-en": {
+        "name": "Moonshine V2 Small",
+        "description": "빠름, 영어 전용. 속도와 정확도의 균형이 좋음."
+      },
+      "moonshine-medium-streaming-en": {
+        "name": "Moonshine V2 Medium",
+        "description": "영어 전용. 높은 품질."
+      },
+      "breeze-asr": {
+        "name": "Breeze ASR",
+        "description": "대만 만다린에 최적화. 코드 스위칭 지원."
+      },
+      "sense-voice-int8": {
+        "name": "SenseVoice",
+        "description": "매우 빠름. 중국어, 영어, 일본어, 한국어, 광둥어."
       }
     },
     "errors": {
@@ -241,8 +261,10 @@
           "clipboardCtrlShiftV": "클립보드 (Ctrl+Shift+V)",
           "clipboardShiftInsert": "클립보드 (Shift+Insert)",
           "direct": "직접",
-          "none": "없음"
-        }
+          "none": "없음",
+          "externalScript": "외부 스크립트"
+        },
+        "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
       "typingTool": {
         "title": "타이핑 도구",
@@ -294,7 +316,8 @@
         "description": "녹음 중 자주 잘못 들리거나 철자가 틀리는 단어를 추가하세요. 시스템이 유사한 소리의 단어를 목록과 일치하도록 자동으로 수정합니다.",
         "placeholder": "단어 추가",
         "add": "추가",
-        "remove": "{{word}} 제거"
+        "remove": "{{word}} 제거",
+        "duplicate": "\"{{word}}\"이(가) 이미 존재합니다"
       }
     },
     "postProcessing": {
