@@ -403,74 +403,85 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           </div>
         )}
 
-        {/* System Audio Permission Card (optional, macOS 14.2+ only) */}
-        {systemAudioAvailable && (
-          <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 rounded-full bg-logo-primary/20 shrink-0">
-                <Volume2 className="w-5 h-5 text-logo-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-text text-sm">
-                  {t("onboarding.permissions.systemAudio.title")}
-                </h3>
-                <p className="text-xs text-text/60">
-                  {t("onboarding.permissions.systemAudio.description")}
-                </p>
-              </div>
-              <div className="shrink-0">
-                {permissions.systemAudio === "granted" ? (
-                  <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
-                    <Check className="w-4 h-4" />
-                    {t("onboarding.permissions.granted")}
-                  </div>
-                ) : permissions.systemAudio === "waiting" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-text/50" />
-                ) : (
-                  <button
-                    onClick={handleGrantSystemAudio}
-                    className="px-3 py-1.5 rounded-lg bg-logo-primary hover:bg-logo-primary/90 text-white text-xs font-medium transition-colors whitespace-nowrap"
-                  >
-                    {t("onboarding.permissions.grant")}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Optional permissions */}
+        {(systemAudioAvailable || showAccessibilityPermission) && (
+          <div className="w-full">
+            <p className="text-xs text-text/40 uppercase tracking-wider mb-2">
+              {t("onboarding.permissions.optional", "Optional — can be enabled later in Settings")}
+            </p>
 
-        {/* Accessibility Permission Card */}
-        {showAccessibilityPermission && (
-          <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
-            <div className="flex items-center gap-4">
-              <div className="p-2.5 rounded-full bg-logo-primary/20 shrink-0">
-                <Keyboard className="w-5 h-5 text-logo-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-text text-sm">
-                  {t("onboarding.permissions.accessibility.title")}
-                </h3>
-                <p className="text-xs text-text/60">
-                  {t("onboarding.permissions.accessibility.description")}
-                </p>
-              </div>
-              <div className="shrink-0">
-                {permissions.accessibility === "granted" ? (
-                  <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
-                    <Check className="w-4 h-4" />
-                    {t("onboarding.permissions.granted")}
+            <div className="flex flex-col gap-3">
+              {/* System Audio Permission Card (optional, macOS 14.2+ only) */}
+              {systemAudioAvailable && (
+                <div className="w-full p-4 rounded-lg border border-mid-gray/10">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 rounded-full bg-white/5 shrink-0">
+                      <Volume2 className="w-5 h-5 text-text/40" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-text/70 text-sm">
+                        {t("onboarding.permissions.systemAudio.title")}
+                      </h3>
+                      <p className="text-xs text-text/40">
+                        {t("onboarding.permissions.systemAudio.description")}
+                      </p>
+                    </div>
+                    <div className="shrink-0">
+                      {permissions.systemAudio === "granted" ? (
+                        <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
+                          <Check className="w-4 h-4" />
+                          {t("onboarding.permissions.granted")}
+                        </div>
+                      ) : permissions.systemAudio === "waiting" ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-text/50" />
+                      ) : (
+                        <button
+                          onClick={handleGrantSystemAudio}
+                          className="px-3 py-1.5 rounded-lg border border-text/20 hover:border-text/40 text-text/60 text-xs font-medium transition-colors whitespace-nowrap"
+                        >
+                          {t("onboarding.permissions.grant")}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ) : permissions.accessibility === "waiting" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-text/50" />
-                ) : (
-                  <button
-                    onClick={handleGrantAccessibility}
-                    className="px-3 py-1.5 rounded-lg bg-logo-primary hover:bg-logo-primary/90 text-white text-xs font-medium transition-colors whitespace-nowrap"
-                  >
-                    {t("onboarding.permissions.grant")}
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* Accessibility Permission Card */}
+              {showAccessibilityPermission && (
+                <div className="w-full p-4 rounded-lg border border-mid-gray/10">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 rounded-full bg-white/5 shrink-0">
+                      <Keyboard className="w-5 h-5 text-text/40" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-text/70 text-sm">
+                        {t("onboarding.permissions.accessibility.title")}
+                      </h3>
+                      <p className="text-xs text-text/40">
+                        {t("onboarding.permissions.accessibility.description")}
+                      </p>
+                    </div>
+                    <div className="shrink-0">
+                      {permissions.accessibility === "granted" ? (
+                        <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
+                          <Check className="w-4 h-4" />
+                          {t("onboarding.permissions.granted")}
+                        </div>
+                      ) : permissions.accessibility === "waiting" ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-text/50" />
+                      ) : (
+                        <button
+                          onClick={handleGrantAccessibility}
+                          className="px-3 py-1.5 rounded-lg border border-text/20 hover:border-text/40 text-text/60 text-xs font-medium transition-colors whitespace-nowrap"
+                        >
+                          {t("onboarding.permissions.grant")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

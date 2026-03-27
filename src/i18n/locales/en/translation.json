@@ -103,12 +103,12 @@
       },
       "accessibility": {
         "title": "Accessibility Access",
-        "description": "Optional. Enables global keyboard shortcuts and automatic text pasting.",
+        "description": "Enables global keyboard shortcuts and automatic text pasting.",
         "optional": "Optional"
       },
       "systemAudio": {
         "title": "System Audio Recording",
-        "description": "Optional. Allows transcribing audio from meetings, videos, and more."
+        "description": "Transcribe audio from meetings, videos, and more."
       },
       "grant": "Grant Permission",
       "granted": "Granted",
