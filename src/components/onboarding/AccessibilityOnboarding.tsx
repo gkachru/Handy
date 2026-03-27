@@ -55,8 +55,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
   const showAccessibilityPermission = isMacOS;
 
   const allGranted = isMacOS
-    ? permissions.accessibility === "granted" &&
-      permissions.microphone === "granted"
+    ? permissions.microphone === "granted"
     : isWindows
       ? permissions.microphone === "granted"
       : true;
@@ -134,7 +133,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
           setPermissions(newState);
 
-          if (accessibilityGranted && microphoneGranted) {
+          if (microphoneGranted) {
             await completeOnboarding();
           }
         } catch (error) {
@@ -240,8 +239,8 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           return newState;
         });
 
-        // If both granted, stop polling, refresh audio devices, and proceed
-        if (accessibilityGranted && microphoneGranted) {
+        // If microphone granted, stop polling, refresh audio devices, and proceed
+        if (microphoneGranted) {
           if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
