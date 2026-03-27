@@ -156,6 +156,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         setPermissions({
           accessibility: "granted",
           microphone: microphoneGranted ? "granted" : "needed",
+          systemAudio: "checking",
         });
 
         if (microphoneGranted) {
@@ -166,6 +167,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         setPermissions({
           accessibility: "granted",
           microphone: "granted",
+          systemAudio: "checking",
         });
         await completeOnboarding();
       }

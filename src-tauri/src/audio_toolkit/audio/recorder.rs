@@ -209,7 +209,18 @@ impl AudioRecorder {
         if let Some(tx) = &self.cmd_tx {
             tx.send(Cmd::Stop(resp_tx))?;
         }
-        Ok(resp_rx.recv()?) // wait for the samples
+        // Use a timeout to avoid hanging if the consumer thread is blocked
+        // (e.g. system audio source with no audio flowing)
+        match resp_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(samples) => Ok(samples),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                log::warn!("Timed out waiting for recorder stop response");
+                Ok(Vec::new())
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err("Recorder thread disconnected".into())
+            }
+        }
     }
 
     pub fn enable_streaming(&self) -> Result<mpsc::Receiver<Vec<f32>>, Box<dyn std::error::Error>> {

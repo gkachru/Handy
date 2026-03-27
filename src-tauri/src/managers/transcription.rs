@@ -468,15 +468,6 @@ impl TranscriptionManager {
         current_model.clone()
     }
 
-    /// Check if the currently selected model is a Mistral API cloud model
-    pub fn is_mistral_api(&self) -> bool {
-        if let Some(model_id) = self.get_current_model() {
-            if let Some(info) = self.model_manager.get_model_info(&model_id) {
-                return matches!(info.engine_type, EngineType::MistralApi);
-            }
-        }
-        false
-    }
 
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
         #[cfg(debug_assertions)]

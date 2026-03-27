@@ -1331,7 +1331,10 @@ struct CancelAction;
 
 impl ShortcutAction for CancelAction {
     fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
-        utils::cancel_current_operation(app);
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            utils::cancel_current_operation(&app).await;
+        });
     }
 
     fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {

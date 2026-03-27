@@ -17,7 +17,7 @@ pub use crate::tray::*;
 
 /// Centralized cancellation function that can be called from anywhere in the app.
 /// Handles cancelling both recording and transcription operations and updates UI state.
-pub fn cancel_current_operation(app: &AppHandle) {
+pub async fn cancel_current_operation(app: &AppHandle) {
     info!("Initiating operation cancellation...");
 
     // Unregister the cancel shortcut asynchronously
@@ -45,34 +45,56 @@ pub fn cancel_current_operation(app: &AppHandle) {
     }
 
     // Stop any active dual-stream components (system audio session + coordinator + capture)
-    {
+    // Take the dual-stream session out of the lock first, then await stop outside the lock.
+    #[cfg(target_os = "macos")]
+    let dual_stream_sys_session = {
         let dual_state = app.state::<DualStreamState>();
         let mut guard = dual_state.0.lock().unwrap();
         if let Some(dual) = guard.take() {
-            #[cfg(target_os = "macos")]
-            {
-                let (_sys_session, mut coordinator, mut sys_capture) = dual;
-                coordinator.stop();
-                sys_capture.stop();
-                // sys_session is dropped here, which stops it
-            }
+            let (sys_session, mut coordinator, mut sys_capture) = dual;
+            coordinator.stop();
+            sys_capture.stop();
+            info!("Dual-stream components cancelled");
+            Some(sys_session)
+        } else {
+            None
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    {
+        let dual_state = app.state::<DualStreamState>();
+        let mut guard = dual_state.0.lock().unwrap();
+        if guard.take().is_some() {
             info!("Dual-stream components cancelled");
         }
     }
 
-    // Stop any active Mistral streaming session
-    {
+    // Stop any active Mistral streaming session (take it out of the lock, then await)
+    let mistral_session = {
         let session_state = app.state::<MistralSessionState>();
-        let mut session_opt = session_state.0.lock().unwrap();
-        if session_opt.is_some() {
-            session_opt.take(); // Drop the session (stop signal handled by Drop)
-            info!("Mistral streaming session cancelled");
-        }
+        let session = session_state.0.lock().unwrap().take();
+        session
+    };
+
+    // Properly stop Mistral sessions with await (sets stop_signal + waits for cleanup)
+    if let Some(mut session) = mistral_session {
+        session.stop().await;
+        info!("Mistral streaming session cancelled");
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(mut sys_session) = dual_stream_sys_session {
+        sys_session.stop().await;
+        info!("Dual-stream system session cancelled");
     }
 
     // Disable audio streaming
     let audio_manager = app.state::<Arc<AudioRecordingManager>>();
     audio_manager.disable_audio_streaming();
+
+    // Stop system audio capture before cancelling recording — the recorder's
+    // consumer thread may be blocked on sample_rx.recv(). Stopping the capture
+    // disconnects the channel so the thread can exit.
+    audio_manager.stop_system_audio_capture();
 
     // Cancel any ongoing recording
     let recording_was_active = audio_manager.is_recording();

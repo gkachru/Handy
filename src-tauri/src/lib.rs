@@ -250,7 +250,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 use crate::utils::cancel_current_operation;
 
                 // Use centralized cancellation that handles all operations
-                cancel_current_operation(app);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    cancel_current_operation(&app).await;
+                });
             }
             "quit" => {
                 app.exit(0);
@@ -512,7 +515,10 @@ pub fn run(cli_args: CliArgs) {
             } else if args.iter().any(|a| a == "--toggle-post-process") {
                 signal_handle::send_transcription_input(app, "transcribe_with_post_process", "CLI");
             } else if args.iter().any(|a| a == "--cancel") {
-                crate::utils::cancel_current_operation(app);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    crate::utils::cancel_current_operation(&app).await;
+                });
             } else {
                 show_main_window(app);
             }

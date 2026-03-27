@@ -454,6 +454,15 @@ impl AudioRecordingManager {
             *did_mute_guard = false;
         }
 
+        // Stop system audio capture FIRST so the recorder's audio source
+        // disconnects, allowing its worker thread to exit cleanly.
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(capture) = self.system_capture.lock().unwrap().as_mut() {
+                capture.stop();
+            }
+        }
+
         // Close the recorder (may block on h.join — no other locks held)
         if let Some(rec) = self.recorder.lock().unwrap().as_mut() {
             if *self.is_recording.lock().unwrap() {
@@ -461,14 +470,6 @@ impl AudioRecordingManager {
                 *self.is_recording.lock().unwrap() = false;
             }
             let _ = rec.close();
-        }
-
-        // Stop system audio capture if active
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(capture) = self.system_capture.lock().unwrap().as_mut() {
-                capture.stop();
-            }
         }
 
         *self.is_open.lock().unwrap() = false;
@@ -720,6 +721,17 @@ impl AudioRecordingManager {
         *self.streaming_bridge_tx.lock().unwrap() = None;
         if let Some(rec) = self.recorder.lock().unwrap().as_ref() {
             let _ = rec.disable_streaming();
+        }
+    }
+
+    /// Stop the system audio capture if active, disconnecting the recorder's
+    /// audio source so its consumer thread can exit.
+    pub fn stop_system_audio_capture(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(capture) = self.system_capture.lock().unwrap().as_mut() {
+                capture.stop();
+            }
         }
     }
 

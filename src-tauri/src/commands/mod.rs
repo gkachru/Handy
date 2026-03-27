@@ -10,8 +10,8 @@ use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
 #[specta::specta]
-pub fn cancel_operation(app: AppHandle) {
-    cancel_current_operation(&app);
+pub async fn cancel_operation(app: AppHandle) {
+    cancel_current_operation(&app).await;
 }
 
 #[tauri::command]

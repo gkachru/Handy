@@ -73,7 +73,6 @@ pub fn is_likely_english(text: &str) -> bool {
 pub struct StreamingTranslator {
     stop_signal: Arc<AtomicBool>,
     task_handle: Option<tauri::async_runtime::JoinHandle<()>>,
-    final_translation: Arc<Mutex<String>>,
 }
 
 impl StreamingTranslator {
@@ -95,7 +94,6 @@ impl StreamingTranslator {
         Self {
             stop_signal,
             task_handle: Some(handle),
-            final_translation,
         }
     }
 
@@ -105,11 +103,6 @@ impl StreamingTranslator {
         if let Some(handle) = self.task_handle.take() {
             handle.abort();
         }
-    }
-
-    /// Get the current translation text.
-    pub fn get_translation(&self) -> String {
-        self.final_translation.lock().unwrap().clone()
     }
 
     async fn translation_loop(

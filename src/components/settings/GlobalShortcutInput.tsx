@@ -36,6 +36,8 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
   );
   const [originalBinding, setOriginalBinding] = useState<string>("");
   const shortcutRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const keyPressedRef = useRef<string[]>([]);
+  const recordedKeysRef = useRef<string[]>([]);
   const osType = useOsType();
 
   const bindings = getSetting("bindings") || {};
@@ -56,11 +58,13 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
       const rawKey = getKeyName(e, osType);
       const key = normalizeKey(rawKey);
 
-      if (!keyPressed.includes(key)) {
-        setKeyPressed((prev) => [...prev, key]);
+      if (!keyPressedRef.current.includes(key)) {
+        keyPressedRef.current = [...keyPressedRef.current, key];
+        setKeyPressed(keyPressedRef.current);
         // Also add to recorded keys if not already there
-        if (!recordedKeys.includes(key)) {
-          setRecordedKeys((prev) => [...prev, key]);
+        if (!recordedKeysRef.current.includes(key)) {
+          recordedKeysRef.current = [...recordedKeysRef.current, key];
+          setRecordedKeys(recordedKeysRef.current);
         }
       }
     };
@@ -74,11 +78,11 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
       const key = normalizeKey(rawKey);
 
       // Remove from currently pressed keys
-      setKeyPressed((prev) => prev.filter((k) => k !== key));
+      keyPressedRef.current = keyPressedRef.current.filter((k) => k !== key);
+      setKeyPressed(keyPressedRef.current);
 
       // If no keys are pressed anymore, commit the shortcut
-      const updatedKeyPressed = keyPressed.filter((k) => k !== key);
-      if (updatedKeyPressed.length === 0 && recordedKeys.length > 0) {
+      if (keyPressedRef.current.length === 0 && recordedKeysRef.current.length > 0) {
         // Create the shortcut string from all recorded keys
         // Sort keys so modifiers come first, then the main key
         const modifiers = [
@@ -94,7 +98,7 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
           "win",
           "windows",
         ];
-        const sortedKeys = recordedKeys.sort((a, b) => {
+        const sortedKeys = [...recordedKeysRef.current].sort((a, b) => {
           const aIsModifier = modifiers.includes(a.toLowerCase());
           const bIsModifier = modifiers.includes(b.toLowerCase());
           if (aIsModifier && !bIsModifier) return -1;
@@ -127,6 +131,8 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
 
           // Exit editing mode and reset states
           setEditingShortcutId(null);
+          keyPressedRef.current = [];
+          recordedKeysRef.current = [];
           setKeyPressed([]);
           setRecordedKeys([]);
           setOriginalBinding("");
@@ -151,6 +157,8 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
           commands.resumeBinding(editingShortcutId).catch(console.error);
         }
         setEditingShortcutId(null);
+        keyPressedRef.current = [];
+        recordedKeysRef.current = [];
         setKeyPressed([]);
         setRecordedKeys([]);
         setOriginalBinding("");
@@ -168,8 +176,6 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
       window.removeEventListener("click", handleClickOutside);
     };
   }, [
-    keyPressed,
-    recordedKeys,
     editingShortcutId,
     bindings,
     originalBinding,
