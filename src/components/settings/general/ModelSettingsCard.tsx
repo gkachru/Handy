@@ -22,8 +22,7 @@ export const ModelSettingsCard: React.FC = () => {
     ? REALTIME_MODEL_IDS.has(currentModel)
     : false;
   const supportsLanguageSelection =
-    currentModelInfo?.engine_type === "Whisper" ||
-    currentModelInfo?.engine_type === "SenseVoice";
+    currentModelInfo?.supports_language_selection ?? false;
   const supportsTranslation = currentModelInfo?.supports_translation ?? false;
   const hasAnySettings =
     supportsLanguageSelection ||
