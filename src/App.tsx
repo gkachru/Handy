@@ -6,6 +6,7 @@ import {
   checkAccessibilityPermission,
   checkMicrophonePermission,
 } from "tauri-plugin-macos-permissions-api";
+
 import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
@@ -57,12 +58,28 @@ function App() {
   useEffect(() => {
     if (onboardingStep === "done" && !hasCompletedPostOnboardingInit.current) {
       hasCompletedPostOnboardingInit.current = true;
-      Promise.all([
-        commands.initializeEnigo(),
-        commands.initializeShortcuts(),
-      ]).catch((e) => {
-        console.warn("Failed to initialize:", e);
-      });
+      // Only initialize Enigo/shortcuts if accessibility permission is granted
+      if (platform() === "macos") {
+        checkAccessibilityPermission()
+          .then((granted) => {
+            if (granted) {
+              return Promise.all([
+                commands.initializeEnigo(),
+                commands.initializeShortcuts(),
+              ]);
+            }
+          })
+          .catch((e) => {
+            console.warn("Failed to initialize:", e);
+          });
+      } else {
+        Promise.all([
+          commands.initializeEnigo(),
+          commands.initializeShortcuts(),
+        ]).catch((e) => {
+          console.warn("Failed to initialize:", e);
+        });
+      }
       refreshAudioDevices();
       refreshOutputDevices();
     }
@@ -104,12 +121,9 @@ function App() {
         setIsReturningUser(true);
         if (platform() === "macos") {
           try {
-            const [hasAccessibility, hasMicrophone] = await Promise.all([
-              checkAccessibilityPermission(),
-              checkMicrophonePermission(),
-            ]);
-            if (!hasAccessibility || !hasMicrophone) {
-              // Missing permissions - show accessibility onboarding
+            const hasMicrophone = await checkMicrophonePermission();
+            if (!hasMicrophone) {
+              // Missing microphone permission - show permissions onboarding
               setOnboardingStep("accessibility");
               return;
             }

@@ -47,10 +47,8 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
   const errorCountRef = useRef<number>(0);
   const MAX_POLLING_ERRORS = 3;
 
-  // allGranted only checks required permissions (not systemAudio)
-  const allGranted =
-    permissions.accessibility === "granted" &&
-    permissions.microphone === "granted";
+  // Only microphone is required to continue
+  const micGranted = permissions.microphone === "granted";
 
   // Check platform and permission status on mount
   useEffect(() => {
@@ -64,7 +62,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       return;
     }
 
-    // On macOS, check both permissions and system audio availability
+    // On macOS, check permissions and system audio availability
     const checkInitial = async () => {
       try {
         const [accessibilityGranted, microphoneGranted, sysAudioAvail] =
@@ -103,8 +101,8 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
         setPermissions(newState);
 
-        // If both required permissions already granted, refresh audio devices and skip ahead
-        if (accessibilityGranted && microphoneGranted) {
+        // If mic is already granted (returning user fast-path), auto-advance
+        if (microphoneGranted) {
           await Promise.all([refreshAudioDevices(), refreshOutputDevices()]);
           timeoutRef.current = setTimeout(() => onComplete(), 300);
         }
@@ -170,17 +168,6 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           return newState;
         });
 
-        // If both required permissions granted, stop polling, refresh audio devices, and proceed
-        if (accessibilityGranted && microphoneGranted) {
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-          }
-          // Now that we have mic permission, refresh audio devices
-          await Promise.all([refreshAudioDevices(), refreshOutputDevices()]);
-          timeoutRef.current = setTimeout(() => onComplete(), 500);
-        }
-
         // Reset error count on success
         errorCountRef.current = 0;
       } catch (error) {
@@ -197,13 +184,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         }
       }
     }, 1000);
-  }, [
-    onComplete,
-    refreshAudioDevices,
-    refreshOutputDevices,
-    systemAudioAvailable,
-    t,
-  ]);
+  }, [systemAudioAvailable, t]);
 
   // Cleanup polling and timeouts on unmount
   useEffect(() => {
@@ -216,6 +197,15 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       }
     };
   }, []);
+
+  const handleContinue = async () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    await Promise.all([refreshAudioDevices(), refreshOutputDevices()]);
+    onComplete();
+  };
 
   const handleGrantAccessibility = async () => {
     try {
@@ -261,20 +251,6 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
     return (
       <div className="h-screen w-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-text/50" />
-      </div>
-    );
-  }
-
-  // All required permissions granted - show success briefly
-  if (allGranted) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center gap-4">
-        <div className="p-4 rounded-full bg-emerald-500/20">
-          <Check className="w-12 h-12 text-emerald-400" />
-        </div>
-        <p className="text-lg font-medium text-text">
-          {t("onboarding.permissions.allGranted")}
-        </p>
       </div>
     );
   }
@@ -331,41 +307,6 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
           </div>
         </div>
 
-        {/* Accessibility Permission Card */}
-        <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-full bg-logo-primary/20 shrink-0">
-              <Keyboard className="w-6 h-6 text-logo-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-text">
-                {t("onboarding.permissions.accessibility.title")}
-              </h3>
-              <p className="text-sm text-text/60 mb-3">
-                {t("onboarding.permissions.accessibility.description")}
-              </p>
-              {permissions.accessibility === "granted" ? (
-                <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                  <Check className="w-4 h-4" />
-                  {t("onboarding.permissions.granted")}
-                </div>
-              ) : permissions.accessibility === "waiting" ? (
-                <div className="flex items-center gap-2 text-text/50 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t("onboarding.permissions.waiting")}
-                </div>
-              ) : (
-                <button
-                  onClick={handleGrantAccessibility}
-                  className="px-4 py-2 rounded-lg bg-logo-primary hover:bg-logo-primary/90 text-white text-sm font-medium transition-colors"
-                >
-                  {t("onboarding.permissions.grant")}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* System Audio Permission Card (optional, macOS 14.2+ only) */}
         {systemAudioAvailable && (
           <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
@@ -402,6 +343,55 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
             </div>
           </div>
         )}
+
+        {/* Accessibility Permission Card (optional) */}
+        <div className="w-full p-4 rounded-lg bg-white/5 border border-mid-gray/20">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-full bg-logo-primary/20 shrink-0">
+              <Keyboard className="w-6 h-6 text-logo-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <h3 className="font-medium text-text">
+                  {t("onboarding.permissions.accessibility.title")}
+                </h3>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-mid-gray/20 text-text/50">
+                  {t("onboarding.permissions.accessibility.optional")}
+                </span>
+              </div>
+              <p className="text-sm text-text/60 mb-3">
+                {t("onboarding.permissions.accessibility.description")}
+              </p>
+              {permissions.accessibility === "granted" ? (
+                <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                  <Check className="w-4 h-4" />
+                  {t("onboarding.permissions.granted")}
+                </div>
+              ) : permissions.accessibility === "waiting" ? (
+                <div className="flex items-center gap-2 text-text/50 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t("onboarding.permissions.waiting")}
+                </div>
+              ) : (
+                <button
+                  onClick={handleGrantAccessibility}
+                  className="px-4 py-2 rounded-lg bg-logo-primary hover:bg-logo-primary/90 text-white text-sm font-medium transition-colors"
+                >
+                  {t("onboarding.permissions.grant")}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Continue Button */}
+        <button
+          onClick={handleContinue}
+          disabled={!micGranted}
+          className="w-full mt-2 px-4 py-3 rounded-lg text-white text-sm font-medium transition-colors bg-logo-primary hover:bg-logo-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {t("onboarding.permissions.continue")}
+        </button>
       </div>
     </div>
   );

@@ -362,7 +362,7 @@ impl ShortcutAction for TranscribeAction {
             if let Some(info) = mm.get_model_info(&settings.selected_model) {
                 matches!(
                     info.engine_type,
-                    EngineType::Parakeet | EngineType::Moonshine
+                    EngineType::Parakeet | EngineType::Moonshine | EngineType::MoonshineStreaming
                 )
             } else {
                 false

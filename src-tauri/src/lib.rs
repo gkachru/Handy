@@ -20,6 +20,7 @@ mod tray_i18n;
 mod utils;
 
 pub use cli::CliArgs;
+use std::sync::Mutex;
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, Builder};
 

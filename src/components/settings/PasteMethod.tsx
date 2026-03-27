@@ -5,6 +5,7 @@ import { SettingContainer } from "../ui/SettingContainer";
 import { Input } from "../ui/Input";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
+import { AccessibilityPermissionPrompt } from "../shared/AccessibilityPermissionPrompt";
 import type { PasteMethod } from "@/bindings";
 
 interface PasteMethodProps {
@@ -102,6 +103,9 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
               )}
               disabled={isUpdating("external_script_path")}
             />
+          )}
+          {selectedMethod !== "none" && osType === "macos" && (
+            <AccessibilityPermissionPrompt featureContext="pasteMethod" />
           )}
         </div>
       </SettingContainer>

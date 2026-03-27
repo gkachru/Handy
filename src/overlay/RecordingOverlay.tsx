@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +26,7 @@ const RecordingOverlay: React.FC = () => {
   const [state, setState] = useState<OverlayState>("recording");
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const [streamingText, setStreamingText] = useState("");
+  const [previewText, setPreviewText] = useState("");
   const [translationText, setTranslationText] = useState("");
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const textAreaRef = useRef<HTMLDivElement>(null);
@@ -75,11 +77,12 @@ const RecordingOverlay: React.FC = () => {
       const dy = e.screenY - dragRef.current.startScreenY;
       try {
         const win = getCurrentWebviewWindow();
-        await win.setPosition({
-          type: "Logical",
-          x: dragRef.current.startWinX + dx,
-          y: dragRef.current.startWinY + dy,
-        });
+        await win.setPosition(
+          new LogicalPosition(
+            dragRef.current.startWinX + dx,
+            dragRef.current.startWinY + dy,
+          ),
+        );
       } catch {
         // Ignore position errors
       }
@@ -111,6 +114,7 @@ const RecordingOverlay: React.FC = () => {
           overlayState === "streaming-translation"
         ) {
           setStreamingText("");
+          setPreviewText("");
           setTranslationText("");
         }
         setIsVisible(true);
@@ -135,13 +139,20 @@ const RecordingOverlay: React.FC = () => {
         setLevels(smoothed.slice(0, 9));
       });
 
-      // Listen for streaming transcription updates
-      const unlistenStreaming = await listen<string>(
-        "streaming-transcription-update",
-        (event) => {
+      // Listen for streaming transcription updates (supports both string and structured payload)
+      const unlistenStreaming = await listen<
+        string | { confirmed: string; preview: string }
+      >("streaming-transcription-update", (event) => {
+        if (typeof event.payload === "string") {
+          // Legacy plain string from Mistral streaming
           setStreamingText(event.payload);
-        },
-      );
+          setPreviewText("");
+        } else {
+          // Structured payload from incremental transcription
+          setStreamingText(event.payload.confirmed);
+          setPreviewText(event.payload.preview);
+        }
+      });
 
       // Listen for streaming translation updates
       const unlistenTranslation = await listen<string>(
@@ -169,7 +180,7 @@ const RecordingOverlay: React.FC = () => {
     if (textAreaRef.current) {
       textAreaRef.current.scrollTop = textAreaRef.current.scrollHeight;
     }
-  }, [streamingText]);
+  }, [streamingText, previewText]);
 
   // Auto-scroll translation text to bottom
   useEffect(() => {
@@ -204,8 +215,16 @@ const RecordingOverlay: React.FC = () => {
           {isTranslationMode ? (
             <div className="streaming-split-view">
               <div className="streaming-original" dir={streamingDir} ref={textAreaRef}>
-                {streamingText ? (
-                  <span>{streamingText}</span>
+                {streamingText || previewText ? (
+                  <>
+                    {streamingText && <span>{streamingText}</span>}
+                    {previewText && (
+                      <span className="streaming-preview-text">
+                        {streamingText ? " " : ""}
+                        {previewText}
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span className="streaming-placeholder">
                     {t("overlay.streaming")}
@@ -229,8 +248,16 @@ const RecordingOverlay: React.FC = () => {
             </div>
           ) : (
             <div className="streaming-text-area" dir={streamingDir} ref={textAreaRef}>
-              {streamingText ? (
-                <span>{streamingText}</span>
+              {streamingText || previewText ? (
+                <>
+                  {streamingText && <span>{streamingText}</span>}
+                  {previewText && (
+                    <span className="streaming-preview-text">
+                      {streamingText ? " " : ""}
+                      {previewText}
+                    </span>
+                  )}
+                </>
               ) : (
                 <span className="streaming-placeholder">
                   {t("overlay.streaming")}

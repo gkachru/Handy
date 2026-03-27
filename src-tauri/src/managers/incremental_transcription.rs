@@ -2,11 +2,18 @@ use crate::audio_toolkit::vad::SmoothedVad;
 use crate::audio_toolkit::SileroVad;
 use crate::managers::transcription::TranscriptionManager;
 use log::{debug, error, info, warn};
+use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
 const WHISPER_SAMPLE_RATE: usize = 16000;
+
+#[derive(Clone, Debug, Serialize)]
+pub struct StreamingTranscriptionPayload {
+    pub confirmed: String,
+    pub preview: String,
+}
 
 /// Manages a VAD-segmented incremental transcription session for fast local models.
 ///
@@ -101,6 +108,11 @@ impl IncrementalTranscriptionSession {
         let mut was_speech = false;
         let is_transcribing = Arc::new(AtomicBool::new(false));
 
+        // Preview transcription: run periodic transcriptions during active speech
+        const PREVIEW_INTERVAL_FRAMES: usize = 17; // ~510ms at 30ms/frame
+        const MIN_PREVIEW_SAMPLES: usize = WHISPER_SAMPLE_RATE / 2; // 0.5s minimum
+        let mut frames_since_last_preview: usize = 0;
+
         info!("Incremental transcription worker started");
 
         loop {
@@ -127,11 +139,60 @@ impl IncrementalTranscriptionSession {
                 Ok(VadFrame::Speech(samples)) => {
                     segment_buffer.extend_from_slice(samples);
                     was_speech = true;
+                    frames_since_last_preview += 1;
+
+                    // Periodic preview transcription during active speech
+                    if frames_since_last_preview >= PREVIEW_INTERVAL_FRAMES
+                        && segment_buffer.len() >= MIN_PREVIEW_SAMPLES
+                        && !is_transcribing.load(Ordering::Relaxed)
+                    {
+                        frames_since_last_preview = 0;
+
+                        let mut preview_buf = segment_buffer.clone();
+                        // Pad short buffers (same logic as segment boundary)
+                        if preview_buf.len() < WHISPER_SAMPLE_RATE {
+                            preview_buf.resize(WHISPER_SAMPLE_RATE * 5 / 4, 0.0);
+                        }
+
+                        let tm_clone = Arc::clone(&tm);
+                        let text_clone = accumulated_text.clone();
+                        let app_clone = app.clone();
+                        let transcribing_flag = is_transcribing.clone();
+
+                        transcribing_flag.store(true, Ordering::Relaxed);
+
+                        std::thread::spawn(move || {
+                            match tm_clone.transcribe(preview_buf) {
+                                Ok(text) if !text.is_empty() => {
+                                    let acc = text_clone.lock().unwrap();
+                                    let confirmed = acc.clone();
+                                    drop(acc);
+
+                                    let _ = app_clone.emit(
+                                        "streaming-transcription-update",
+                                        StreamingTranscriptionPayload {
+                                            confirmed,
+                                            preview: text.clone(),
+                                        },
+                                    );
+                                    debug!("Incremental: preview transcription: \"{}\"", text);
+                                }
+                                Ok(_) => {
+                                    debug!("Incremental: preview transcription returned empty");
+                                }
+                                Err(e) => {
+                                    warn!("Incremental: preview transcription failed: {}", e);
+                                }
+                            }
+                            transcribing_flag.store(false, Ordering::Relaxed);
+                        });
+                    }
                 }
                 Ok(VadFrame::Noise) => {
                     if was_speech && !segment_buffer.is_empty() {
                         // Segment boundary detected: speech → silence transition
                         was_speech = false;
+                        frames_since_last_preview = 0;
 
                         // Check if a previous segment is still being transcribed
                         if is_transcribing.load(Ordering::Relaxed) {
@@ -176,9 +237,14 @@ impl IncrementalTranscriptionSession {
                                     let current = acc.clone();
                                     drop(acc);
 
-                                    // Emit to streaming overlay (same event as Mistral)
-                                    let _ =
-                                        app_clone.emit("streaming-transcription-update", current);
+                                    // Emit structured payload with confirmed text, no preview
+                                    let _ = app_clone.emit(
+                                        "streaming-transcription-update",
+                                        StreamingTranscriptionPayload {
+                                            confirmed: current,
+                                            preview: String::new(),
+                                        },
+                                    );
                                     debug!("Incremental: segment transcribed: \"{}\"", text);
                                 }
                                 Ok(_) => {

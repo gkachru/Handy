@@ -23,6 +23,9 @@ export const REALTIME_MODEL_IDS = new Set([
   "mistral-voxtral-realtime",
   "parakeet-tdt-0.6b-v3",
   "moonshine-base",
+  "moonshine-tiny-streaming-en",
+  "moonshine-small-streaming-en",
+  "moonshine-medium-streaming-en",
 ]);
 
 // Get display text for model's language support

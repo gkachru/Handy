@@ -90,7 +90,8 @@
       },
       "accessibility": {
         "title": "Accessibility Access",
-        "description": "Required to type transcribed text into your applications."
+        "description": "Optional. Enables global keyboard shortcuts and automatic text pasting.",
+        "optional": "Optional"
       },
       "systemAudio": {
         "title": "System Audio Recording",
@@ -100,6 +101,7 @@
       "granted": "Granted",
       "waiting": "Waiting...",
       "allGranted": "All set!",
+      "continue": "Continue",
       "errors": {
         "checkFailed": "Failed to check permissions. Please try again.",
         "requestFailed": "Failed to request permission. Please try again."
@@ -564,7 +566,12 @@
     "permissionsRequired": "Accessibility Permissions Required",
     "permissionsDescription": "Handy needs accessibility permissions to type transcribed text.",
     "openSettings": "Open System Settings",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "prompt": {
+      "pasteMethod": "Accessibility permission is required to paste transcribed text into applications.",
+      "shortcuts": "Accessibility permission is required to register global keyboard shortcuts.",
+      "grantPermission": "Grant Accessibility Permission"
+    }
   },
   "errors": {
     "loadDirectory": "Error loading directory: {{error}}"

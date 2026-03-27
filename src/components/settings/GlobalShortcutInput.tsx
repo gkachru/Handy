@@ -9,6 +9,7 @@ import { ResetButton } from "../ui/ResetButton";
 import { SettingContainer } from "../ui/SettingContainer";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
+import { AccessibilityPermissionPrompt } from "../shared/AccessibilityPermissionPrompt";
 import { commands } from "@/bindings";
 import { toast } from "sonner";
 
@@ -281,35 +282,40 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
   );
 
   return (
-    <SettingContainer
-      title={translatedName}
-      description={translatedDescription}
-      descriptionMode={descriptionMode}
-      grouped={grouped}
-      disabled={disabled}
-      layout="horizontal"
-    >
-      <div className="flex items-center space-x-1">
-        {editingShortcutId === shortcutId ? (
-          <div
-            ref={(ref) => setShortcutRef(shortcutId, ref)}
-            className="px-2 py-1 text-sm font-semibold border border-logo-primary bg-logo-primary/30 rounded-md"
-          >
-            {formatCurrentKeys()}
-          </div>
-        ) : (
-          <div
-            className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded-md cursor-pointer hover:border-logo-primary"
-            onClick={() => startRecording(shortcutId)}
-          >
-            {formatKeyCombination(binding.current_binding, osType)}
-          </div>
-        )}
-        <ResetButton
-          onClick={() => resetBinding(shortcutId)}
-          disabled={isUpdating(`binding_${shortcutId}`)}
-        />
-      </div>
-    </SettingContainer>
+    <div className="flex flex-col gap-2">
+      <SettingContainer
+        title={translatedName}
+        description={translatedDescription}
+        descriptionMode={descriptionMode}
+        grouped={grouped}
+        disabled={disabled}
+        layout="horizontal"
+      >
+        <div className="flex items-center space-x-1">
+          {editingShortcutId === shortcutId ? (
+            <div
+              ref={(ref) => setShortcutRef(shortcutId, ref)}
+              className="px-2 py-1 text-sm font-semibold border border-logo-primary bg-logo-primary/30 rounded-md"
+            >
+              {formatCurrentKeys()}
+            </div>
+          ) : (
+            <div
+              className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded-md cursor-pointer hover:border-logo-primary"
+              onClick={() => startRecording(shortcutId)}
+            >
+              {formatKeyCombination(binding.current_binding, osType)}
+            </div>
+          )}
+          <ResetButton
+            onClick={() => resetBinding(shortcutId)}
+            disabled={isUpdating(`binding_${shortcutId}`)}
+          />
+        </div>
+      </SettingContainer>
+      {osType === "macos" && (
+        <AccessibilityPermissionPrompt featureContext="shortcuts" />
+      )}
+    </div>
   );
 };
