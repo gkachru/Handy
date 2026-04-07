@@ -156,6 +156,22 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
         .cloned()
         .unwrap_or_default();
 
+    // Disable reasoning for providers where post-processing rarely benefits from it.
+    // - custom: top-level reasoning_effort (works for local OpenAI-compat servers)
+    // - openrouter: nested reasoning object; exclude:true also keeps reasoning text
+    //   out of the response so it can't pollute structured-output JSON parsing
+    let (reasoning_effort, reasoning) = match provider.id.as_str() {
+        "custom" => (Some("none".to_string()), None),
+        "openrouter" => (
+            None,
+            Some(crate::llm_client::ReasoningConfig {
+                effort: Some("none".to_string()),
+                exclude: Some(true),
+            }),
+        ),
+        _ => (None, None),
+    };
+
     if provider.supports_structured_output {
         debug!("Using structured outputs for provider '{}'", provider.id);
 
@@ -226,6 +242,8 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
             user_content,
             Some(system_prompt),
             Some(json_schema),
+            reasoning_effort.clone(),
+            reasoning.clone(),
         )
         .await
         {
@@ -275,8 +293,15 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
     let processed_prompt = prompt.replace("${output}", transcription);
     debug!("Processed prompt length: {} chars", processed_prompt.len());
 
-    match crate::llm_client::send_chat_completion(&provider, api_key, &model, processed_prompt)
-        .await
+    match crate::llm_client::send_chat_completion(
+        &provider,
+        api_key,
+        &model,
+        processed_prompt,
+        reasoning_effort,
+        reasoning,
+    )
+    .await
     {
         Ok(Some(content)) => {
             let content = strip_invisible_chars(&content);
@@ -326,7 +351,7 @@ async fn maybe_convert_chinese_variant(
         BuiltinConfig::Tw2sp
     } else {
         // Convert Simplified Chinese to Traditional Chinese
-        BuiltinConfig::S2twp
+        BuiltinConfig::S2tw
     };
 
     match OpenCC::from_config(config) {
@@ -399,11 +424,18 @@ impl ShortcutAction for TranscribeAction {
 
         // Load model in the background
         let tm = app.state::<Arc<TranscriptionManager>>();
-        tm.initiate_model_load();
-
-        let binding_id = binding_id.to_string();
         let rm = app.state::<Arc<AudioRecordingManager>>();
 
+        // Load ASR model and VAD model in parallel
+        tm.initiate_model_load();
+        let rm_clone = Arc::clone(&rm);
+        std::thread::spawn(move || {
+            if let Err(e) = rm_clone.preload_vad() {
+                debug!("VAD pre-load failed: {}", e);
+            }
+        });
+
+        let binding_id = binding_id.to_string();
         // Check if using Mistral API for streaming mode
         let settings = get_settings(app);
         let is_mistral_api = settings.selected_model == "mistral-voxtral-realtime"
@@ -827,7 +859,10 @@ impl ShortcutAction for TranscribeAction {
                                     Ok(()) => {
                                         debug!("Text pasted successfully in {:?}", paste_time.elapsed())
                                     }
-                                    Err(e) => error!("Failed to paste transcription: {}", e),
+                                    Err(e) => {
+                                        error!("Failed to paste transcription: {}", e);
+                                        let _ = ah_clone.emit("paste-error", ());
+                                    }
                                 }
                                 utils::hide_recording_overlay(&ah_clone);
                                 change_tray_icon(&ah_clone, TrayIconState::Idle);
@@ -1014,7 +1049,10 @@ impl ShortcutAction for TranscribeAction {
                                         "Text pasted successfully in {:?}",
                                         paste_time.elapsed()
                                     ),
-                                    Err(e) => error!("Failed to paste transcription: {}", e),
+                                    Err(e) => {
+                                        error!("Failed to paste transcription: {}", e);
+                                        let _ = ah_clone.emit("paste-error", ());
+                                    }
                                 }
                                 utils::hide_recording_overlay(&ah_clone);
                                 change_tray_icon(&ah_clone, TrayIconState::Idle);
@@ -1168,7 +1206,10 @@ impl ShortcutAction for TranscribeAction {
                                         paste_time.elapsed()
                                     )
                                 }
-                                Err(e) => error!("Failed to paste transcription: {}", e),
+                                Err(e) => {
+                                    error!("Failed to paste transcription: {}", e);
+                                    let _ = ah_clone.emit("paste-error", ());
+                                }
                             }
                             utils::hide_recording_overlay(&ah_clone);
                             change_tray_icon(&ah_clone, TrayIconState::Idle);
@@ -1279,7 +1320,8 @@ impl ShortcutAction for TranscribeAction {
                                                 paste_time.elapsed()
                                             ),
                                             Err(e) => {
-                                                error!("Failed to paste transcription: {}", e)
+                                                error!("Failed to paste transcription: {}", e);
+                                                let _ = ah_clone.emit("paste-error", ());
                                             }
                                         }
                                         utils::hide_recording_overlay(&ah_clone);

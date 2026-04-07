@@ -296,6 +296,25 @@ impl AudioRecordingManager {
         }
     }
 
+    pub fn preload_vad(&self) -> Result<(), anyhow::Error> {
+        let mut recorder_opt = self.recorder.lock().unwrap();
+        if recorder_opt.is_none() {
+            let vad_path = self
+                .app_handle
+                .path()
+                .resolve(
+                    "resources/models/silero_vad_v4.onnx",
+                    tauri::path::BaseDirectory::Resource,
+                )
+                .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;
+            *recorder_opt = Some(create_audio_recorder(
+                vad_path.to_str().unwrap(),
+                &self.app_handle,
+            )?);
+        }
+        Ok(())
+    }
+
     pub fn start_microphone_stream(&self) -> Result<(), anyhow::Error> {
         let audio_source = *self.audio_source.lock().unwrap();
         match audio_source {
